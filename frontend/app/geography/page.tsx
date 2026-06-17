@@ -157,7 +157,7 @@ export default function GeographyPage() {
           </Source>
           
           {/* Hotspot Labels & Markers */}
-          {realCenters.map(cluster => (
+          {realCenters.map((cluster: any) => (
             <Marker key={cluster.id} longitude={cluster.lon} latitude={cluster.lat} anchor="center">
               <div 
                 onClick={(e) => {

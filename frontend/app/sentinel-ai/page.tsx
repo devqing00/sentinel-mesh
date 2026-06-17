@@ -102,7 +102,7 @@ export default function SentinelAIPage() {
   // Save to MongoDB whenever conversations change
   useEffect(() => {
     if (conversations.length > 0 && operatorId) {
-      syncConversations(operatorId, conversations).catch(e => console.error("Failed to sync", e));
+      syncConversations(operatorId, conversations as any).catch(e => console.error("Failed to sync", e));
     }
   }, [conversations, operatorId]);
 

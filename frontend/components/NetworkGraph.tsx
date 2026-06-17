@@ -246,7 +246,7 @@ export function NetworkGraph({
         const cy = cytoscape({
           container: containerRef.current,
           elements,
-          style: CY_STYLE,
+          style: CY_STYLE as any,
           layout: {
             name:              'cose',
             animate:           true,

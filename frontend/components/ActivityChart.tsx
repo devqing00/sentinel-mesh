@@ -146,7 +146,7 @@ export default function ActivityChart() {
       )}
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <AreaChart
-          data={isLiveMode ? chartData : historicalData}
+          data={(isLiveMode ? chartData : historicalData) as any[]}
           margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
         >
           <defs>

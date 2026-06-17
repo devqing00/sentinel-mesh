@@ -414,7 +414,7 @@ export default function Dashboard() {
 
             <div className="relative max-h-[300px] overflow-hidden group">
               <div className="px-6 py-2 pb-24">
-                <RankedUserTable data={displayData} limit={6} hideControls={true} />
+                <RankedUserTable data={displayData as any} limit={6} hideControls={true} />
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none z-10" />
               <div className="absolute bottom-6 left-0 right-0 flex justify-center z-20 opacity-90 group-hover:opacity-100 transition-opacity">
