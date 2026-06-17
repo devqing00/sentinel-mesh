@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 
 import GlobalAIPanel from "@/components/GlobalAIPanel";
+import KeepAlive from "@/components/KeepAlive";
 
 export const metadata: Metadata = {
   title: "Sentinel Mesh — IoT Health Surveillance Dashboard",
@@ -48,6 +49,7 @@ export default function RootLayout({
                 </div>
                 <Toaster position="bottom-center" theme="dark" toastOptions={{ className: 'text-sm !w-auto !max-w-xs !p-3 !min-h-0' }} />
                 <GlobalAIPanel />
+                <KeepAlive />
               </TooltipProvider>
             </WebSocketProvider>
           </AuthProvider>

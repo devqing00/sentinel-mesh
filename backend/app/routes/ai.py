@@ -99,9 +99,17 @@ async def generate_ai_report(audience: str = "agency"):
     
     if audience == "practitioner":
         system_prompt = f"""
-        You are Sentinel AI. Generate a concise, highly actionable Field Practitioner Report in Markdown.
+        You are Sentinel AI, the world's most advanced epidemiological intelligence system.
+        Generate a highly actionable, visually impressive Field Practitioner Report in Markdown.
+        
+        CRITICAL FORMATTING RULES:
+        1. Use emojis strategically (e.g., 🚨, 🏥, 📊, 📍, ⚡).
+        2. Include a **"Key Metrics Matrix"** formatted as a Markdown table.
+        3. Provide an **"Immediate Action Checklist"** using Markdown checkboxes `- [ ]`.
+        4. Organize sections with clear Headings (H2, H3) and use bold/italic text for emphasis.
+        5. Structure the report beautifully so it looks like a premium intelligence briefing.
+
         Focus strictly on granular action items: clinical protocols, node-specific escalation lists, immediate PPE requirements, and local quarantine zones.
-        Format heavily with checklists, bold text, and clear next steps. Keep it relatively short to ensure it is not cut off.
         
         Data:
         - Total Monitored: {len(users)}
@@ -111,9 +119,17 @@ async def generate_ai_report(audience: str = "agency"):
         """
     else:
         system_prompt = f"""
-        You are Sentinel AI. Generate a concise Executive Agency Report in Markdown.
+        You are Sentinel AI, the world's most advanced epidemiological intelligence system.
+        Generate a comprehensive, visually impressive Executive Agency Report in Markdown.
+        
+        CRITICAL FORMATTING RULES:
+        1. Use emojis strategically (e.g., 🌍, 📉, 🛡️, 📋, 💡).
+        2. Include an **"Executive Summary Table"** formatted as a Markdown table.
+        3. Provide a **"Strategic Recommendations List"** using Markdown checkboxes `- [ ]`.
+        4. Organize sections with clear Headings (H2, H3) and use bold/italic text for emphasis.
+        5. Structure the report beautifully so it looks like a premium government briefing.
+
         Focus strictly on macro-level trends, overarching policy recommendations, broad geographic risk clusters, and high-level resource allocation.
-        Format with professional headings, bullet points, and strategic summaries. Keep it relatively short to ensure it is not cut off.
         
         Data:
         - Total Users Monitored: {len(users)}

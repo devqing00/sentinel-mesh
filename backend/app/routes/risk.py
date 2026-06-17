@@ -291,7 +291,7 @@ async def calculate_community_risks():
     contact_counts: dict = defaultdict(int)
 
     try:
-        vitals_cursor = db.vitals.find({})
+        vitals_cursor = db.vitals.find({}).sort("timestamp", -1).limit(5000)
         async for doc in vitals_cursor:
             gh = (doc.get("geohash") or "")[:4]
             if not gh:
@@ -311,7 +311,7 @@ async def calculate_community_risks():
                 clusters[gh]["coord_count"] += 1
 
         # Count contacts per cluster
-        contacts_cursor = db.contacts.find({"proximity": "close"})
+        contacts_cursor = db.contacts.find({"proximity": "close"}).sort("timestamp", -1).limit(5000)
         async for doc in contacts_cursor:
             gh = (doc.get("geohash") or "")[:4]
             if gh:

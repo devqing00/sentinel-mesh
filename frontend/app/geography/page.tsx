@@ -82,7 +82,7 @@ export default function GeographyPage() {
   const [mounted, setMounted] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState<any>(null);
   const [dispatchTarget, setDispatchTarget] = useState<string | null>(null);
-  const [mapTheme, setMapTheme] = useState<"light-v11" | "dark-v11" | "satellite-streets-v12">("dark-v11");
+  const [mapTheme, setMapTheme] = useState<"light-v11" | "dark-v11" | "satellite-streets-v12">("light-v11");
   const [showSettings, setShowSettings] = useState(false);
   
   // Fetch actual data from backend
@@ -112,22 +112,17 @@ export default function GeographyPage() {
     setMounted(true);
   }, []);
 
-  // Auto-focus map on data load
+  // Auto-focus map on data load (highest risk hotspot)
   useEffect(() => {
     if (realCenters.length > 0 && mapRef.current) {
-      const lons = realCenters.map((c: any) => c.lon);
-      const lats = realCenters.map((c: any) => c.lat);
-      const minLon = Math.min(...lons);
-      const maxLon = Math.max(...lons);
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      
-      const centerLon = (minLon + maxLon) / 2;
-      const centerLat = (minLat + maxLat) / 2;
+      // Find the center with the highest risk score
+      const highestRiskCenter = realCenters.reduce((max: any, current: any) => 
+        (current.baseWeight > max.baseWeight) ? current : max
+      , realCenters[0]);
 
       try {
         mapRef.current.flyTo({
-          center: [centerLon, centerLat],
+          center: [highestRiskCenter.lon, highestRiskCenter.lat],
           zoom: 12,
           duration: 2500,
           essential: true
@@ -141,7 +136,7 @@ export default function GeographyPage() {
   if (!mounted) return null;
 
   return (
-    <div className="h-full w-full relative flex overflow-hidden bg-[#0b1021]">
+    <div className={`h-full w-full relative flex overflow-hidden transition-colors ${mapTheme === 'light-v11' ? 'bg-gray-50' : 'bg-[#0b1021]'}`}>
       {/* Map Container */}
       <div className="absolute inset-0 z-0">
         <Map
@@ -153,7 +148,7 @@ export default function GeographyPage() {
           onClick={() => setSelectedCluster(null)}
         >
           {/* HOTSPOTS MODE */}
-          <Source type="geojson" data={hotspotData as any}>
+          <Source id="risk-heatmap-source" type="geojson" data={hotspotData as any}>
             <Layer {...heatmapLayer} />
           </Source>
           
@@ -276,30 +271,30 @@ export default function GeographyPage() {
       <div className="relative z-10 w-80 h-full p-6 flex flex-col pointer-events-none">
         
         {/* Header */}
-        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 mb-6 shadow-2xl pointer-events-auto">
-          <h1 className="text-xl font-display font-bold text-white tracking-tight flex items-center gap-2 mb-1">
-            <Activity className="w-5 h-5 text-rose-400" />
+        <div className={`backdrop-blur-2xl border rounded-2xl p-5 mb-6 shadow-2xl pointer-events-auto transition-colors ${mapTheme === 'light-v11' ? 'bg-white/80 border-gray-200' : 'bg-white/5 border-white/10'}`}>
+          <h1 className={`text-xl font-display font-bold tracking-tight flex items-center gap-2 mb-1 ${mapTheme === 'light-v11' ? 'text-gray-900' : 'text-white'}`}>
+            <Activity className="w-5 h-5 text-rose-500" />
             Geography
           </h1>
-          <p className="text-xs text-rose-200/70">
+          <p className={`text-xs ${mapTheme === 'light-v11' ? 'text-rose-600/70' : 'text-rose-200/70'}`}>
             Real-time GNN epidemiological mapping
           </p>
         </div>
 
         {/* Dynamic Context Panel */}
-        <div className="mt-auto bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl p-5 shadow-2xl pointer-events-auto">
+        <div className={`mt-auto backdrop-blur-2xl border rounded-2xl p-5 shadow-2xl pointer-events-auto transition-colors ${mapTheme === 'light-v11' ? 'bg-white/80 border-gray-200' : 'bg-white/5 border-white/10'}`}>
           <div>
-            <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <h3 className={`text-sm font-bold mb-2 flex items-center gap-2 ${mapTheme === 'light-v11' ? 'text-gray-900' : 'text-white'}`}>
+              <ShieldAlert className="w-4 h-4 text-rose-500" />
               Hotspot Intelligence
             </h3>
-            <p className="text-xs text-gray-400 leading-relaxed mb-4">
+            <p className={`text-xs leading-relaxed mb-4 ${mapTheme === 'light-v11' ? 'text-gray-600' : 'text-gray-400'}`}>
               This layer visualizes the concentration of high-risk users and recent vital anomalies. Bright red areas indicate a severe density of potential contagion spread, requiring immediate operator focus.
             </p>
-            <div className="flex items-center justify-between pt-4 border-t border-white/10">
+            <div className={`flex items-center justify-between pt-4 border-t ${mapTheme === 'light-v11' ? 'border-gray-200' : 'border-white/10'}`}>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">Active Clusters</p>
-                <p className="text-xl font-display font-bold text-white">4</p>
+                <p className={`text-xl font-display font-bold ${mapTheme === 'light-v11' ? 'text-gray-900' : 'text-white'}`}>4</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">At-Risk Pop</p>

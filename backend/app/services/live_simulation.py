@@ -17,8 +17,8 @@ async def device_simulation_task(db, device, base_lat, base_lon):
     
     while True:
         try:
-            # Sleep spontaneously but fast so it "gushes"
-            sleep_time = random.uniform(0.1, 1.5)
+            # Sleep spontaneously to hit roughly 40 messages per second across 50 devices
+            sleep_time = random.uniform(0.5, 2.0)
             await asyncio.sleep(sleep_time)
 
             now = datetime.utcnow()
@@ -61,8 +61,8 @@ async def device_simulation_task(db, device, base_lat, base_lon):
                 "timestamp": now
             }
 
-            # Generate Vitals
-            is_anomalous = (device in ANOMALOUS_DEVICES) or (random.random() < 0.05)
+            # Generate Vitals: 8% chance per message gives ~3.2 anomalies/sec total across 40 msgs/sec
+            is_anomalous = (device in ANOMALOUS_DEVICES) or (random.random() < 0.08)
             
             temp = random.uniform(38.5, 40.0) if is_anomalous else random.uniform(36.0, 37.5)
             hr = random.randint(100, 130) if is_anomalous else random.randint(60, 90)

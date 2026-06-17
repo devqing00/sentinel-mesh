@@ -62,10 +62,8 @@ export default function AlertsPage() {
   const [exporting, setExporting] = useState(false);
   const [dispatchingTarget, setDispatchingTarget] = useState<string | null>(null);
 
-  // Only show users that actually need attention
-  const attentionData = rankedData.filter(
-    (d: any) => d.category === "escalating" || d.category === "persistently-high"
-  );
+  // Show all users, matching the dashboard display
+  const attentionData = rankedData;
 
   const handleGenerateAlerts = async (clusterId: string) => {
     setGenerating(true);

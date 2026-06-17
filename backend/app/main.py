@@ -70,3 +70,7 @@ async def root():
             "stats": "/api/ingest/stats",
         }
     }
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}

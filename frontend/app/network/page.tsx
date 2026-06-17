@@ -12,6 +12,8 @@ interface GraphNode {
   type: string;
   connections: number;
   centrality: number;
+  lat?: number;
+  lon?: number;
 }
 
 interface GraphEdge {
@@ -75,9 +77,9 @@ export default function NetworkPage() {
       anomaly_flag: n.anomaly ? -1 : 1,
       anomaly_score: n.centrality,
       risk_tier: n.anomaly ? 'CRITICAL' : 'LOW',
-      geo4: 'zone-1',
-      latitude: 0,
-      longitude: 0,
+      geo4: n.lat ? `Zone-${n.lat.toString().substring(0, 5)}` : 'Unknown',
+      latitude: n.lat,
+      longitude: n.lon,
     }));
 
     const r0_seed = superspreadersList.length > 0 ? superspreadersList[0] : "";

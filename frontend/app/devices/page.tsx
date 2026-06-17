@@ -230,7 +230,11 @@ export default function DevicesPage() {
               <div 
                 key={device.device_id} 
                 className={`premium-card flex flex-col justify-between group overflow-hidden cursor-pointer transition-all ${
-                  (device.status === 'dead' || device.status === 'critical')
+                  (device.battery_percent === 0)
+                    ? 'border-red-500 border-2 shadow-[0_0_20px_rgba(239,68,68,0.4)]'
+                    : (device.battery_percent > 0 && device.battery_percent <= 15)
+                    ? 'border-red-600 border-[3px] animate-pulse ring-4 ring-red-500/50 shadow-[0_0_25px_rgba(244,63,94,0.6)]'
+                    : (device.status === 'dead' || device.status === 'critical')
                     ? 'border-rose-500/80 shadow-[0_0_20px_rgba(244,63,94,0.4)] hover:border-rose-400 hover:shadow-[0_0_25px_rgba(244,63,94,0.6)]'
                     : 'hover:border-indigo-200'
                 }`}

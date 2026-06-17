@@ -31,7 +31,7 @@ const SPARK_W   = 260;
 const SPARK_H   = 52;
 
 export default function SimulatorPage() {
-  const [isRunning,  setIsRunning]  = useState(false);
+  const [isRunning,  setIsRunning]  = useState(true);
   const [isSpiking,  setIsSpiking]  = useState(false);
   const [beating,    setBeating]    = useState(false);
 
@@ -423,24 +423,7 @@ export default function SimulatorPage() {
                 </div>
               </div>
 
-              {/* Controls */}
-              <div className="px-5 flex gap-3 mt-auto">
-                <button
-                  onClick={() => setIsRunning(!isRunning)}
-                  className={`flex-1 h-12 rounded-2xl font-bold text-sm transition-all shadow-sm active:scale-95 ${
-                    isRunning ? 'bg-white text-red-500 border border-red-100 hover:bg-red-50' : 'bg-gray-900 text-white hover:bg-black'
-                  }`}
-                >
-                  {isRunning ? 'Stop Sim' : 'Start Sim'}
-                </button>
-                <button
-                  disabled={!isRunning || isSpiking}
-                  onClick={() => setIsSpiking(true)}
-                  className="flex-1 h-12 rounded-2xl font-bold text-sm transition-all bg-white border border-gray-200 text-gray-900 shadow-sm disabled:opacity-50 active:scale-95 hover:bg-gray-50"
-                >
-                  {isSpiking ? `Anomaly (${spikeLeft}s)` : 'Trigger Anomaly'}
-                </button>
-              </div>
+
 
             </div>
           </div>
