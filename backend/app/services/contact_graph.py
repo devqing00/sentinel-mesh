@@ -1,94 +1,88 @@
 from collections import defaultdict
 from datetime import datetime, timezone
-from app.db import get_database
 import networkx as nx
+from app.services.risk_scoring import get_dataframes
+import pandas as pd
+import os
 
+_graph_cache = {}
 
 async def generate_contact_graph(end_date: str = None):
     """
-    Build a real contact network graph:
-    - Nodes: user_ids (U-prefix) and device_ids (D-prefix from mac column)
+    Build a real contact network graph from CSV using Pandas:
+    - Nodes: user_ids and device_ids
     - Edges: user detected device, weighted by frequency
-    - Anomaly flags from vitals data
     """
-    db = get_database()
-
-    # 0. Check Cache First
-    cache_key = f"network_graph_{end_date or 'live'}"
-    cached_graph = await db.system_cache.find_one({"key": cache_key})
+    global _graph_cache
+    now = datetime.now(timezone.utc)
     
-    if cached_graph:
-        now = datetime.now(timezone.utc)
-        cache_time = cached_graph.get("timestamp")
-        if cache_time and getattr(cache_time, 'tzinfo', None) is None:
-            cache_time = cache_time.replace(tzinfo=timezone.utc)
-        
-        # Return cache if less than 2 minutes old
-        if cache_time and (now - cache_time).total_seconds() < 120:
-            print("[Cache] Serving network graph from MongoDB")
-            return cached_graph.get("data")
+    cache_key = f"network_graph_{end_date or 'live'}"
+    if cache_key in _graph_cache:
+        cached_data, cache_time = _graph_cache[cache_key]
+        if (now - cache_time).total_seconds() < 120:
+            return cached_data
 
-    # 1. Handle end_date filter
+    mob_df, con_df, vit_df = get_dataframes()
+
     date_filter = None
     if end_date:
         dt_end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
         if dt_end.tzinfo is None:
             dt_end = dt_end.replace(tzinfo=timezone.utc)
-        date_filter = {"$lte": dt_end}
+        date_filter = dt_end
 
-    # 2. Get anomalous device IDs from vitals
     anomalous_devices = set()
-    vitals_query = {
-        "$or": [
-            {"temp_status": "high"},
-            {"hr_status": "high"},
-            {"temperature": {"$gte": 38.0}},
-            {"heartbeat": {"$gt": 100}},
-        ]
-    }
-    if date_filter:
-        vitals_query = {"$and": [{"timestamp": date_filter}, vitals_query]}
+    TEMP_THRESHOLD = float(os.getenv("TEMP_THRESHOLD", "38.0"))
+    HR_THRESHOLD = int(os.getenv("HR_THRESHOLD", "100"))
 
-    cursor = db.vitals.find(vitals_query, {"device_id": 1}).sort("timestamp", -1).limit(5000)
-    async for doc in cursor:
-        anomalous_devices.add(doc["device_id"])
+    if not vit_df.empty:
+        v_df = vit_df
+        if date_filter:
+            v_df = v_df[v_df['timestamp'] <= date_filter]
+        
+        mask = (
+            (v_df['temp_status'] == 'high') |
+            (v_df['hr_status'] == 'high') |
+            (v_df['temperature'] >= TEMP_THRESHOLD) |
+            (v_df['heartbeat'] > HR_THRESHOLD)
+        )
+        anomalous_devices.update(v_df[mask]['device_id'].dropna().astype(str).tolist())
 
-    # 3. Build edge weights from contacts (only close-proximity)
     edge_weights = defaultdict(int)
     node_positions = {}
 
-    contacts_query = {"proximity": "close"}
-    if date_filter:
-        contacts_query["timestamp"] = date_filter
+    if not con_df.empty:
+        c_df = con_df[con_df['proximity'] == 'close']
+        if date_filter:
+            c_df = c_df[c_df['timestamp'] <= date_filter]
 
-    contact_cursor = db.contacts.find(
-        contacts_query,
-        {"user_id": 1, "mac": 1, "latitude": 1, "longitude": 1}
-    ).sort("timestamp", -1).limit(5000)
+        # Process most recent first to mimic .sort("timestamp", -1)
+        c_df = c_df.sort_values('timestamp', ascending=False).head(5000)
 
-    async for doc in contact_cursor:
-        user = doc["user_id"]
-        device = doc["mac"]
-        edge_key = (user, device)
-        edge_weights[edge_key] += 1
+        for _, row in c_df.iterrows():
+            user = str(row.get("user_id", ""))
+            device = str(row.get("mac", ""))
+            if not user or user == "nan" or not device or device == "nan":
+                continue
+                
+            edge_key = (user, device)
+            edge_weights[edge_key] += 1
+            
+            lat = float(row.get("latitude", 0)) if pd.notnull(row.get("latitude")) else 0
+            lon = float(row.get("longitude", 0)) if pd.notnull(row.get("longitude")) else 0
 
-        # Store positions for geographic view
-        if user not in node_positions:
-            node_positions[user] = {"lat": doc["latitude"], "lon": doc["longitude"]}
-        if device not in node_positions:
-            node_positions[device] = {"lat": doc["latitude"], "lon": doc["longitude"]}
+            if user not in node_positions:
+                node_positions[user] = {"lat": lat, "lon": lon}
+            if device not in node_positions:
+                node_positions[device] = {"lat": lat, "lon": lon}
 
-    # 4. Build networkx graph for centrality metrics
     G = nx.Graph()
     for (src, tgt), weight in edge_weights.items():
         G.add_edge(src, tgt, weight=weight)
 
-    # Compute degree centrality
     centrality = nx.degree_centrality(G) if len(G.nodes) > 0 else {}
 
-    # 5. Format output
     edges = []
-    # Take top 2000 edges by weight
     sorted_edges = sorted(edge_weights.items(), key=lambda x: x[1], reverse=True)
     for (src, tgt), weight in sorted_edges[:2000]:
         edges.append({
@@ -97,7 +91,6 @@ async def generate_contact_graph(end_date: str = None):
             "weight": weight,
         })
 
-    # Collect nodes ONLY from the selected edges to avoid "node not found" crashes
     active_nodes = set()
     for e in edges:
         active_nodes.add(e["source"])
@@ -119,7 +112,6 @@ async def generate_contact_graph(end_date: str = None):
             "connections": G.degree(node_id) if node_id in G else 0,
         })
 
-    # Sort so anomalous nodes come first
     nodes.sort(key=lambda x: (not x["anomaly"], -x["connections"]))
 
     result = {
@@ -134,15 +126,5 @@ async def generate_contact_graph(end_date: str = None):
         }
     }
     
-    # Save to Cache
-    await db.system_cache.update_one(
-        {"key": cache_key},
-        {"$set": {
-            "key": cache_key,
-            "data": result,
-            "timestamp": datetime.now(timezone.utc)
-        }},
-        upsert=True
-    )
-
+    _graph_cache[cache_key] = (result, now)
     return result

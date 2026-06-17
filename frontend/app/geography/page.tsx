@@ -9,13 +9,13 @@ import DispatchPanel from "@/components/DispatchPanel";
 import useSWR from "swr";
 import { getCommunityRisks } from "@/lib/api";
 
-// We center the map near Lagos/Southwest Nigeria where the mock clusters are.
+// We center the map to show Nigeria as a whole.
 const INITIAL_VIEW_STATE = {
-  longitude: 3.38,
-  latitude: 6.52,
-  zoom: 11,
-  pitch: 45,
-  bearing: -17.6,
+  longitude: 8.6753,
+  latitude: 9.0820,
+  zoom: 5.5,
+  pitch: 0,
+  bearing: 0,
 };
 
 // Pre-compute random offsets so the heatmap points don't flicker on every render cycle
@@ -111,27 +111,6 @@ export default function GeographyPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Auto-focus map on data load (highest risk hotspot)
-  useEffect(() => {
-    if (realCenters.length > 0 && mapRef.current) {
-      // Find the center with the highest risk score
-      const highestRiskCenter = realCenters.reduce((max: any, current: any) => 
-        (current.baseWeight > max.baseWeight) ? current : max
-      , realCenters[0]);
-
-      try {
-        mapRef.current.flyTo({
-          center: [highestRiskCenter.lon, highestRiskCenter.lat],
-          zoom: 12,
-          duration: 2500,
-          essential: true
-        });
-      } catch (e) {
-        console.error("FlyTo failed:", e);
-      }
-    }
-  }, [realCenters]);
 
   if (!mounted) return null;
 

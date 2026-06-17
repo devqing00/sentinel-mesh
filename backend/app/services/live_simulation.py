@@ -2,18 +2,16 @@ import asyncio
 import random
 import uuid
 import os
-from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorClient
+from datetime import datetime, timezone
 from app.websocket import manager
-
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/sentinelmesh")
+from app.services.risk_scoring import append_live_records
 
 DEVICES = [f"live_{i:03d}_{uuid.uuid4().hex[:6]}" for i in range(50)]
 ANOMALOUS_DEVICES = DEVICES[:3] # Consistently anomalous devices
 
-async def device_simulation_task(db, device, base_lat, base_lon):
+async def device_simulation_task(device, base_lat, base_lon):
     """Independent background task for a single device simulating spontaneous data pushes."""
-    print(f"[Device {device}] Simulation started.")
+    print(f"[Device {device}] Simulation started in memory.")
     
     while True:
         try:
@@ -21,7 +19,7 @@ async def device_simulation_task(db, device, base_lat, base_lon):
             sleep_time = random.uniform(0.5, 2.0)
             await asyncio.sleep(sleep_time)
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             date_str = now.strftime("%Y-%m-%d")
             time_str = now.strftime("%H:%M:%S")
 
@@ -85,12 +83,8 @@ async def device_simulation_task(db, device, base_lat, base_lon):
                 "timestamp": now
             }
 
-            try:
-                await db.contacts.insert_one(contact_doc)
-                await db.mobility.insert_one(mobility_doc)
-                await db.vitals.insert_one(vitals_doc)
-            except Exception as db_err:
-                print(f"[Simulation DB Sync Error] {db_err}")
+            # Append to Pandas directly in memory!
+            append_live_records(mob_doc=mobility_doc, con_doc=contact_doc, vit_doc=vitals_doc)
 
             # Alert triggering via WebSocket
             if is_anomalous and manager.active_connections:
@@ -144,20 +138,14 @@ async def activity_ticker_task():
 
 async def live_simulation_loop():
     """Main orchestrator for live simulation tasks."""
-    client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-    db_name = MONGO_URI.rsplit("/", 1)[-1].split("?")[0]
-    if not db_name or db_name == "localhost:27017":
-        db_name = "sentinelmesh"
-    db = client[db_name]
-
-    print("[Live Simulation] Orchestrating spontaneous device connections...")
+    print("[Live Simulation] Orchestrating spontaneous in-memory device connections...")
 
     base_lat = 7.84
     base_lon = 9.77
 
     tasks = []
     for device in DEVICES:
-        tasks.append(asyncio.create_task(device_simulation_task(db, device, base_lat, base_lon)))
+        tasks.append(asyncio.create_task(device_simulation_task(device, base_lat, base_lon)))
     
     tasks.append(asyncio.create_task(activity_ticker_task()))
 

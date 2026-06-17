@@ -1,47 +1,58 @@
 from datetime import datetime
-from app.db import get_database
-
+from app.services.risk_scoring import get_dataframes
+import os
 
 async def generate_sormas_payload(cluster_id: str):
     """
     Generate a SORMAS/eIDSR-compatible case notification payload
-    using real data from the cluster.
+    using real data from the Pandas dataframes.
     """
-    db = get_database()
+    TEMP_THRESHOLD = float(os.getenv("TEMP_THRESHOLD", "38.0"))
+    HR_THRESHOLD = int(os.getenv("HR_THRESHOLD", "100"))
 
-    # Get vitals anomalies for this cluster
-    anomalies = []
-    cursor = db.vitals.find({
-        "geohash": {"$regex": f"^{cluster_id[:5]}"},
-        "$or": [
-            {"temp_status": "high"},
-            {"hr_status": "high"},
-            {"temperature": {"$gte": 38.0}},
-            {"heartbeat": {"$gt": 100}},
-        ]
-    }).limit(50)
-
+    _, con_df, vit_df = get_dataframes()
+    
     contributing_devices = set()
     symptoms = set()
     max_temp = 0
     max_hr = 0
     lat, lon = 0, 0
-
-    async for doc in cursor:
-        contributing_devices.add(doc["device_id"])
-        if doc.get("temperature", 0) >= 38.0 or doc.get("temp_status") == "high":
-            symptoms.add("Fever")
-            max_temp = max(max_temp, doc.get("temperature", 0))
-        if doc.get("heartbeat", 0) > 100 or doc.get("hr_status") == "high":
-            symptoms.add("Elevated Heart Rate")
-            max_hr = max(max_hr, doc.get("heartbeat", 0))
-        lat = doc.get("latitude", lat)
-        lon = doc.get("longitude", lon)
+    
+    if not vit_df.empty:
+        # Filter by geohash startswith cluster_id[:5]
+        v_df = vit_df[vit_df['geohash'].astype(str).str.startswith(cluster_id[:5])]
+        
+        # Filter by anomalies
+        mask = (
+            (v_df['temp_status'] == 'high') |
+            (v_df['hr_status'] == 'high') |
+            (v_df['temperature'] >= TEMP_THRESHOLD) |
+            (v_df['heartbeat'] > HR_THRESHOLD)
+        )
+        anomalous_v_df = v_df[mask].head(50)
+        
+        for _, row in anomalous_v_df.iterrows():
+            contributing_devices.add(str(row.get('device_id', '')))
+            
+            t = float(row.get('temperature', 0))
+            if t >= 38.0 or str(row.get('temp_status')) == 'high':
+                symptoms.add("Fever")
+                max_temp = max(max_temp, t)
+                
+            hr = float(row.get('heartbeat', 0))
+            if hr > 100 or str(row.get('hr_status')) == 'high':
+                symptoms.add("Elevated Heart Rate")
+                max_hr = max(max_hr, hr)
+                
+            if pd.notnull(row.get('latitude')):
+                lat = float(row['latitude'])
+            if pd.notnull(row.get('longitude')):
+                lon = float(row['longitude'])
 
     # Get contact chain size
-    contact_count = await db.contacts.count_documents({
-        "mac": {"$in": list(contributing_devices)}
-    }) if contributing_devices else 0
+    contact_count = 0
+    if not con_df.empty and contributing_devices:
+        contact_count = con_df[con_df['mac'].astype(str).isin(contributing_devices)].shape[0]
 
     # Map geohash to approximate region
     region_map = {

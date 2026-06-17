@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 import json
+import asyncio
 from groq import AsyncGroq
 from app.db import get_database
 from app.services.risk_scoring import score_all_users
@@ -12,6 +13,10 @@ from firebase_admin import auth as firebase_auth
 from app.websocket import manager
 
 router = APIRouter(prefix="/api/risk", tags=["risk"])
+
+@router.get("/ws-debug")
+async def get_ws_debug():
+    return {"active_connections": len(manager.active_connections)}
 
 class AnalysisRequest(BaseModel):
     split_date: Optional[str] = "2024-03-01T00:00:00Z"
@@ -91,74 +96,93 @@ async def get_ranked_table(user: dict = Depends(get_current_user)):
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
     """WebSocket endpoint for real-time risk data streaming."""
+    print(f"[WS DEBUG] Connection attempt. Token: {token}")
     # Authenticate via token query param
     if not token:
+        print("[WS DEBUG] No token provided")
         await websocket.close(code=1008)
         return
         
-    if os.getenv("FIREBASE_MOCK_AUTH", "true").lower() == "true" and token == "mock-token":
-        # Accept mock
+    mock_auth = os.getenv("FIREBASE_MOCK_AUTH", "true").lower() == "true"
+    print(f"[WS DEBUG] Mock auth enabled: {mock_auth}")
+    
+    if mock_auth and token == "mock-token":
+        print("[WS DEBUG] Mock auth passed")
         pass
     else:
         try:
+            print("[WS DEBUG] Verifying real token...")
             firebase_auth.verify_id_token(token)
+            print("[WS DEBUG] Real token passed")
         except Exception as e:
             print(f"[WS ERROR] WebSocket Auth Failed: {e}")
             await websocket.close(code=1008)
             return
 
     await manager.connect(websocket)
-    db = get_database()
+    print("[WS DEBUG] Connected to manager")
     try:
         while True:
             try:
-                # Check for cache hit
-                cache_doc = await db.system_cache.find_one({"_id": "ranked_users_cache"})
-                ranked_table = []
-                
-                if cache_doc and "data" in cache_doc:
-                    ranked_table = cache_doc["data"]
-                
+                # Use the new Pandas-based in-memory scoring engine
+                ranked_table = await score_all_users()
                 await websocket.send_json({"type": "ranked_table", "data": ranked_table})
                 await asyncio.sleep(2)
-            except (Exception, WebSocketDisconnect):
+            except WebSocketDisconnect:
+                print("[WS] Client disconnected normally")
                 break
-    except Exception:
-        pass
+            except Exception as inner_e:
+                print(f"[WS ERROR] Exception in score_all_users loop: {inner_e}")
+                import traceback
+                traceback.print_exc()
+                break
+    except Exception as outer_e:
+        print(f"[WS ERROR] Outer exception: {outer_e}")
     finally:
         manager.disconnect(websocket)
 
 
+from app.services.risk_scoring import get_dataframes
+import pandas as pd
+
 @router.get("/user/{user_id}")
 async def get_user_detail(user_id: str, user: dict = Depends(get_current_user)):
     """
-    Full profile for a single user: their vitals, contacts, mobility, and risk factors.
-    Used to power the individual detail modal.
+    Full profile for a single user powered entirely by Pandas DataFrames.
     """
-    db = get_database()
     TEMP_THRESHOLD = float(os.getenv("TEMP_THRESHOLD", "38.0"))
     HR_THRESHOLD = int(os.getenv("HR_THRESHOLD", "100"))
 
+    # Accommodate both CSV mappings and mock data
+    search_ids = [user_id, user_id.replace("U", "D")]
+    if user_id.startswith("uev_"):
+        search_ids.append(user_id.replace("uev_", "dev_"))
+
+    mob_df, con_df, vit_df = get_dataframes()
+    
     # 1. Their contact/device records
-    contacts_cursor = db.contacts.find({"user_id": user_id}).sort("timestamp", -1).limit(200)
     contact_docs = []
-    mac_set = set()
-    async for doc in contacts_cursor:
-        doc.pop("_id", None)
-        if doc.get("timestamp"): doc["timestamp"] = doc["timestamp"].isoformat()
-        contact_docs.append(doc)
-        if doc.get("mac"): mac_set.add(doc["mac"])
+    mac_set = set(search_ids) # Pre-populate so vitals load even if contacts are empty
+    
+    if not con_df.empty:
+        mask = con_df['user_id'].isin(search_ids) | con_df.get('device_id', pd.Series(dtype=str)).isin(search_ids)
+        c_df = con_df[mask].sort_values('timestamp', ascending=False).head(200)
+        for _, row in c_df.iterrows():
+            d = row.to_dict()
+            if pd.notnull(d.get('timestamp')): d['timestamp'] = d['timestamp'].isoformat()
+            contact_docs.append(d)
+            if pd.notnull(d.get('mac')): mac_set.add(str(d['mac']))
+            if pd.notnull(d.get('device_id')): mac_set.add(str(d['device_id']))
 
     # 2. Vitals for their linked devices
     vitals_docs = []
-    if mac_set:
-        vitals_cursor = db.vitals.find(
-            {"device_id": {"$in": list(mac_set)}}
-        ).sort("timestamp", -1).limit(100)
-        async for doc in vitals_cursor:
-            doc.pop("_id", None)
-            if doc.get("timestamp"): doc["timestamp"] = doc["timestamp"].isoformat()
-            vitals_docs.append(doc)
+    if mac_set and not vit_df.empty:
+        mask = vit_df['device_id'].isin(list(mac_set))
+        v_df = vit_df[mask].sort_values('timestamp', ascending=False).head(100)
+        for _, row in v_df.iterrows():
+            d = row.to_dict()
+            if pd.notnull(d.get('timestamp')): d['timestamp'] = d['timestamp'].isoformat()
+            vitals_docs.append(d)
 
     # 3. Anomalous vitals specifically
     anomalous = [v for v in vitals_docs if (
@@ -169,20 +193,22 @@ async def get_user_detail(user_id: str, user: dict = Depends(get_current_user)):
     )]
 
     # 4. Mobility / location data
-    mobility_cursor = db.mobility.find({"user_id": user_id}).sort("timestamp", -1).limit(50)
     mobility_docs = []
-    async for doc in mobility_cursor:
-        doc.pop("_id", None)
-        if doc.get("timestamp"): doc["timestamp"] = doc["timestamp"].isoformat()
-        mobility_docs.append(doc)
+    if not mob_df.empty:
+        mask = mob_df['user_id'].isin(search_ids) | mob_df.get('device_id', pd.Series(dtype=str)).isin(search_ids)
+        m_df = mob_df[mask].sort_values('timestamp', ascending=False).head(50)
+        for _, row in m_df.iterrows():
+            d = row.to_dict()
+            if pd.notnull(d.get('timestamp')): d['timestamp'] = d['timestamp'].isoformat()
+            mobility_docs.append(d)
 
-    # 5. Other users who shared proximity with this user's devices
+    # 5. Other users who shared proximity
     exposed_users = set()
     for c in contact_docs:
         if c.get("user_id") and c["user_id"] != user_id:
             exposed_users.add(c["user_id"])
 
-    # 6. Find their ranking from cache or recompute
+    # 6. Find their ranking from cache
     ranked_entry = None
     ranked_cache = await score_all_users()
     for entry in ranked_cache:
@@ -204,7 +230,7 @@ async def get_user_detail(user_id: str, user: dict = Depends(get_current_user)):
     if len(exposed_users) > 0:
         risk_factors.append(f"Shared contact events with {len(exposed_users)} other individuals")
     if mobility_docs:
-        geohashes = list({m.get("geohash", "")[:4] for m in mobility_docs if m.get("geohash")})
+        geohashes = list({str(m.get("geohash", ""))[:4] for m in mobility_docs if pd.notnull(m.get("geohash"))})
         risk_factors.append(f"Movement recorded across {len(geohashes)} geographic regions: "
                             f"{', '.join(geohashes[:5])}")
     if ranked_entry:
@@ -225,40 +251,26 @@ async def get_user_detail(user_id: str, user: dict = Depends(get_current_user)):
     }
 
 
-
 @router.get("/activity")
 async def get_activity_trend(user: dict = Depends(get_current_user)):
-    """Fetch real activity timeline from mobility collection."""
-    db = get_database()
-    
-    pipeline = [
-        {"$group": {
-            "_id": {
-                "year": {"$year": "$timestamp"},
-                "month": {"$month": "$timestamp"},
-                "day": {"$dayOfMonth": "$timestamp"}
-            },
-            "count": {"$sum": 1}
-        }},
-        {"$sort": {"_id.year": -1, "_id.month": -1, "_id.day": -1}},
-        {"$limit": 60}
-    ]
-    
+    """Fetch activity timeline via Pandas."""
+    mob_df, _, _ = get_dataframes()
     results = []
-    try:
-        cursor = db.mobility.aggregate(pipeline)
-        async for doc in cursor:
-            if not doc["_id"].get("year"):
-                continue
-            dt = datetime(doc["_id"]["year"], doc["_id"]["month"], doc["_id"]["day"])
-            results.append({
-                "date": dt.strftime("%a"),
-                "fullDate": dt.strftime("%b %d"),
-                "activity": doc["count"]
-            })
-    except Exception as e:
-        print(f"[Activity Trend Error] {e}")
+    
+    if not mob_df.empty:
+        # Extract date from timestamp
+        mob_df['date_only'] = mob_df['timestamp'].dt.date
+        counts = mob_df.groupby('date_only').size().reset_index(name='count')
+        counts = counts.sort_values('date_only', ascending=False).head(60)
         
+        for _, row in counts.iterrows():
+            d = row['date_only']
+            results.append({
+                "date": d.strftime("%a"),
+                "fullDate": d.strftime("%b %d"),
+                "activity": row["count"]
+            })
+            
     # Reverse so oldest is first
     results.reverse()
     return {"trend": results}
@@ -267,7 +279,7 @@ async def get_activity_trend(user: dict = Depends(get_current_user)):
 # Keep legacy routes for backwards compatibility until frontend is fully migrated
 @router.get("/communities")
 async def get_communities(user: dict = Depends(get_current_user)):
-    """Return real geohash-clustered community risks."""
+    """Return geohash-clustered community risks."""
     results = await calculate_community_risks()
     return results
 
@@ -276,13 +288,11 @@ async def get_anomalies(user: dict = Depends(get_current_user)):
     return []
 
 async def calculate_community_risks():
-    """Real community risk clustering from vitals + contacts data."""
+    """Community risk clustering via Pandas."""
     from collections import defaultdict
-    db = get_database()
     TEMP_THRESHOLD = float(os.getenv("TEMP_THRESHOLD", "38.0"))
     HR_THRESHOLD = int(os.getenv("HR_THRESHOLD", "100"))
 
-    # Group vitals by geohash prefix (4 chars = ~20km resolution)
     clusters: dict = defaultdict(lambda: {
         "devices": set(), "anomalous": set(),
         "lat_sum": 0.0, "lon_sum": 0.0, "coord_count": 0
@@ -290,34 +300,38 @@ async def calculate_community_risks():
 
     contact_counts: dict = defaultdict(int)
 
-    try:
-        vitals_cursor = db.vitals.find({}).sort("timestamp", -1).limit(5000)
-        async for doc in vitals_cursor:
-            gh = (doc.get("geohash") or "")[:4]
-            if not gh:
-                continue
-            did = doc.get("device_id", "")
-            clusters[gh]["devices"].add(did)
-            if (doc.get("temperature", 0) >= TEMP_THRESHOLD or
-                    doc.get("heartbeat", 0) > HR_THRESHOLD or
-                    doc.get("temp_status") == "high" or
-                    doc.get("hr_status") == "high"):
-                clusters[gh]["anomalous"].add(did)
-            lat = doc.get("latitude") or doc.get("lat")
-            lon = doc.get("longitude") or doc.get("lon")
-            if lat and lon:
-                clusters[gh]["lat_sum"] += lat
-                clusters[gh]["lon_sum"] += lon
-                clusters[gh]["coord_count"] += 1
-
-        # Count contacts per cluster
-        contacts_cursor = db.contacts.find({"proximity": "close"}).sort("timestamp", -1).limit(5000)
-        async for doc in contacts_cursor:
-            gh = (doc.get("geohash") or "")[:4]
-            if gh:
+    _, con_df, vit_df = get_dataframes()
+    
+    if not vit_df.empty:
+        v_df = vit_df.sort_values('timestamp', ascending=False).head(5000)
+        for _, row in v_df.iterrows():
+            gh = str(row.get('geohash', ''))[:4]
+            if not gh or gh == 'nan': continue
+            did = str(row.get('device_id', ''))
+            clusters[gh]['devices'].add(did)
+            
+            is_anomalous = (
+                float(row.get('temperature', 0)) >= TEMP_THRESHOLD or
+                float(row.get('heartbeat', 0)) > HR_THRESHOLD or
+                str(row.get('temp_status')) == "high" or
+                str(row.get('hr_status')) == "high"
+            )
+            if is_anomalous:
+                clusters[gh]['anomalous'].add(did)
+                
+            lat = float(row.get('latitude', 0)) if pd.notnull(row.get('latitude')) else None
+            lon = float(row.get('longitude', 0)) if pd.notnull(row.get('longitude')) else None
+            if lat is not None and lon is not None:
+                clusters[gh]['lat_sum'] += lat
+                clusters[gh]['lon_sum'] += lon
+                clusters[gh]['coord_count'] += 1
+                
+    if not con_df.empty:
+        c_df = con_df[con_df['proximity'] == 'close'].sort_values('timestamp', ascending=False).head(5000)
+        for _, row in c_df.iterrows():
+            gh = str(row.get('geohash', ''))[:4]
+            if gh and gh != 'nan':
                 contact_counts[gh] += 1
-    except Exception as e:
-        print(f"[Community Risk DB Error] {e}")
 
     results = []
     for gh, data in clusters.items():
@@ -326,13 +340,12 @@ async def calculate_community_risks():
         contact_count = contact_counts.get(gh, 0)
         coord_count = data["coord_count"] or 1
 
-        # Risk score: anomaly ratio (60%) + contact pressure (40%)
         anomaly_ratio = anomalous_count / max(device_count, 1)
         contact_pressure = min(contact_count / 50.0, 1.0)
         risk_score = round(min(100.0, (anomaly_ratio * 60.0) + (contact_pressure * 40.0)), 1)
 
         if device_count < 2:
-            continue  # Skip singleton clusters
+            continue
 
         results.append({
             "cluster_id": gh,
@@ -345,8 +358,7 @@ async def calculate_community_risks():
         })
 
     results.sort(key=lambda x: x["risk_score"], reverse=True)
-    return results  # Return all clusters
-
+    return results
 
 async def get_anomalous_vitals_summary():
     return []

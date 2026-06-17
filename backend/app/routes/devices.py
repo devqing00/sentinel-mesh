@@ -19,16 +19,9 @@ from app.routes.ingest import clear_all_collections, ingest_all
 async def api_stop_simulation():
     res = await stop_simulation()
     
-    # Reset DB to clean slate in background to prevent HTTP timeouts
-    async def reset_db():
-        try:
-            await clear_all_collections()
-            await ingest_all()
-        except Exception as e:
-            print(f"[Simulation Stop Error] DB reset failed: {e}")
-            
-    import asyncio
-    asyncio.create_task(reset_db())
+    # We no longer need to reset MongoDB since the simulation runs entirely in-memory using Pandas lists.
+    # To clear the simulation, we could theoretically clear the lists, but stopping it is enough for now.
+    
     return res
 
 class PingData(BaseModel):
