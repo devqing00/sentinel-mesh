@@ -57,7 +57,7 @@ flowchart LR
 # Slide 7: Output Layer - Dashboards & Alerts
 
 * **Real-time Synchronization:** Powered by bi-directional WebSockets, UI elements update instantly as data arrives.
-* **Contact Tracing Map:** A visual, force-directed graph showing exact transmission vectors.
+* **7 Distinct Data Visualizations:** Includes a Force-Directed Contact Tracing Graph, Risk Trajectory Scatters, Network Density charts, and interactive Mapbox Geospatial clusters.
 * **Community Health Watch:** Actionable alerts that allow workers to instantly:
   * Draft localized warnings.
   * Dispatch SMS broadcasts via Africa's Talking.
@@ -68,10 +68,10 @@ flowchart LR
 *(Placeholder for Live Demo or Screenshot Walkthrough)*
 
 ### Demonstration Highlights:
-1. **Interactive Simulator:** Watch 50 software agents generate organic telemetry data.
-2. **Injecting an Anomaly:** We manually induce a high fever on a simulated node.
-3. **The Ripple Effect:** Watch the Dashboard graphs instantly surge and the Network Map highlight the infected user and their recent contacts.
-4. **AI Reasoning:** We ask Sentinel AI for an analysis of the new anomaly.
+1. **Interactive Simulation:** Watch 50 software agents autonomously generate organic telemetry data.
+2. **Automated Anomaly Detection:** The system dynamically identifies nodes running high fevers.
+3. **The Ripple Effect:** Watch the Dashboard graphs instantly surge and the Network Map highlight infected vectors and their recent contacts.
+4. **AI Reasoning:** We ask Sentinel AI for an analysis of the evolving outbreak in real-time.
 <!-- slide -->
 # Slide 9: Real-World Deployment Plan
 

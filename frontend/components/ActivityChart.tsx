@@ -50,63 +50,8 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function ActivityChart() {
-  const { latestActivity, isLiveMode } = useWebSocketData();
-  const { user } = useAuth();
+  const { latestActivity } = useWebSocketData();
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [fullHistoricalData, setFullHistoricalData] = useState<{ date: string; fullDate: string; activity: number }[]>([]);
-  const [historicalData, setHistoricalData] = useState<{ date: string; fullDate: string; activity: number }[]>([]);
-
-  // Fetch historical data for regular mode
-  useEffect(() => {
-    if (!isLiveMode && user) {
-      const fetchActivity = async () => {
-        try {
-          const token = await user.getIdToken();
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/risk/activity`, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          const data = await res.json();
-          let trend = data.trend || [];
-          
-          if (trend.length < 60) {
-            // Pad the data to 60 days so we have weeks of data to scroll through
-            const padded = [];
-            const d = new Date();
-            d.setDate(d.getDate() - trend.length);
-            for (let i = 60 - trend.length; i > 0; i--) {
-              d.setDate(d.getDate() - 1);
-              padded.push({
-                date: d.toLocaleDateString('en-US', { weekday: 'short' }),
-                fullDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                activity: Math.floor(Math.random() * 150) + 50
-              });
-            }
-            trend = [...padded.reverse(), ...trend];
-          }
-          setFullHistoricalData(trend);
-          setHistoricalData(trend.slice(0, 14));
-        } catch (e) {
-          console.error("Failed to fetch historical activity");
-        }
-      };
-      fetchActivity();
-    }
-  }, [isLiveMode, user]);
-
-  // Animate historical data by sliding the window
-  useEffect(() => {
-    if (isLiveMode || fullHistoricalData.length <= 14) return;
-
-    let currentIndex = 0;
-    const interval = setInterval(() => {
-      currentIndex = (currentIndex + 1) % (fullHistoricalData.length - 13);
-      setHistoricalData(fullHistoricalData.slice(currentIndex, currentIndex + 14));
-    }, 2000); // Slide window every 2 seconds
-
-    return () => clearInterval(interval);
-  }, [isLiveMode, fullHistoricalData]);
 
   // Initialize with 60 seconds of zero data
   useEffect(() => {
@@ -128,8 +73,6 @@ export default function ActivityChart() {
 
   // Update chart every second with the latestActivity
   useEffect(() => {
-    if (!isLiveMode) return;
-
     const interval = setInterval(() => {
       setChartData((prev) => {
         if (prev.length === 0) return prev;
@@ -147,36 +90,30 @@ export default function ActivityChart() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isLiveMode]);
+  }, []);
 
   return (
     <div className="w-full h-full relative">
-      {isLiveMode && (
-        <div className="absolute top-2 right-2 px-2 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[10px] font-bold z-10 animate-pulse flex items-center gap-1">
-          <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />
-          LIVE SIMULATION
-        </div>
-      )}
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <AreaChart
-          data={(isLiveMode ? chartData : historicalData) as any[]}
+          data={chartData}
           margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
         >
           <defs>
             <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={isLiveMode ? "#f43f5e" : "#3b82f6"} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={isLiveMode ? "#f43f5e" : "#3b82f6"} stopOpacity={0} />
+              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis 
-            dataKey={isLiveMode ? "time" : "date"} 
+            dataKey="time" 
             axisLine={false} 
             tickLine={false} 
             tick={{ fill: "#94a3b8", fontSize: 10 }}
             dy={10}
             minTickGap={20}
-            label={{ value: isLiveMode ? 'Real-time (Seconds)' : 'Past 7 Days', position: 'insideBottomRight', offset: -15, fill: '#64748b', fontSize: 12 }}
+            label={{ value: 'Real-time (Seconds)', position: 'insideBottomRight', offset: -15, fill: '#64748b', fontSize: 12 }}
           />
           <YAxis 
             axisLine={false} 
@@ -187,15 +124,14 @@ export default function ActivityChart() {
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} animationDuration={100} />
           <Area
-            key={isLiveMode ? "live" : "history"}
+            key="live"
             type="monotone"
             dataKey="activity"
-            stroke={isLiveMode ? "#f43f5e" : "#3b82f6"}
+            stroke="#f43f5e"
             strokeWidth={3}
             fillOpacity={1}
             fill="url(#colorActivity)"
-            isAnimationActive={!isLiveMode}
-            animationDuration={1500}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>

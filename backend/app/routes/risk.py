@@ -102,7 +102,8 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
     else:
         try:
             firebase_auth.verify_id_token(token)
-        except Exception:
+        except Exception as e:
+            print(f"[WS ERROR] WebSocket Auth Failed: {e}")
             await websocket.close(code=1008)
             return
 

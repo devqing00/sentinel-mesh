@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useWebSocketData } from '../../context/WebSocketContext';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const DEVICE_ID = 'WATCH_001';
@@ -32,7 +31,6 @@ const SPARK_W   = 260;
 const SPARK_H   = 52;
 
 export default function SimulatorPage() {
-  const { isLiveMode, setIsLiveMode } = useWebSocketData();
   const [isRunning,  setIsRunning]  = useState(false);
   const [isSpiking,  setIsSpiking]  = useState(false);
   const [beating,    setBeating]    = useState(false);
@@ -274,16 +272,6 @@ export default function SimulatorPage() {
           </div>
         </div>
 
-        {/* Global Live Mode Toggle in Navbar */}
-        <div className="flex items-center gap-3 bg-white/5 p-1 rounded-xl border border-white/5">
-          <span className="text-xs font-semibold px-2 text-gray-400">Live DB Sync</span>
-          <button
-            onClick={() => setIsLiveMode(!isLiveMode)}
-            className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${isLiveMode ? 'bg-indigo-500' : 'bg-gray-700'}`}
-          >
-            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform duration-300 shadow-sm ${isLiveMode ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </div>
       </header>
 
       {/* ── Main Layout ─────────────────────────────────────────────────────── */}

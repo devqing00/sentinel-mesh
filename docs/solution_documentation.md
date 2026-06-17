@@ -64,14 +64,15 @@ The current prototype is a fully functioning web application consisting of a Fas
 
 **What it demonstrates:**
 * A **Live Simulator** featuring 50 organic, concurrent software agents mimicking humans wearing Tracy devices. 
-* A real-time WebSocket architecture that instantly updates the frontend Contact Tracing Force Graph and Dashboard metrics as simulated outbreaks occur.
-* Live generation of localized alerts, SMS broadcast capabilities, and integration with the LLaMA 3.3 AI model for context-aware chat.
+* A real-time WebSocket architecture that instantly streams and updates the frontend Contact Tracing Force Graph and Dashboard metrics.
+* A rich, interactive interface featuring **7 distinct data visualizations** (including Risk Trajectory Scatter plots, Network Density graphs, real-time Area Charts, and interactive Mapbox Geospatial clusters) to provide deep epidemiological intelligence.
+* Live generation of localized alerts, SMS broadcast capabilities via Africa's Talking, and integration with the LLaMA 3.3 AI model for context-aware chat.
 
 **How to run it:**
 1. Clone the repository and configure `.env` (MongoDB URI, Groq API, Africa's Talking API).
 2. Start the backend: `cd backend && pip install -r requirements.txt && python -m uvicorn app.main:app --reload`
 3. Start the frontend: `cd frontend && npm install && npm run dev`
-4. Open `localhost:3000` and visit the `/simulator` page to actively inject anomalies into the mesh.
+4. Open `localhost:3000`. The application connects to the WebSockets and automatically initiates the live simulation stream upon login.
 
 ---
 

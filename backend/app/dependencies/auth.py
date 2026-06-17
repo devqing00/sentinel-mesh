@@ -6,12 +6,17 @@ from firebase_admin import auth, credentials
 
 # Initialize Firebase Admin if not already initialized
 if not firebase_admin._apps:
-    # Use explicit credentials if path is provided, otherwise relies on GOOGLE_APPLICATION_CREDENTIALS
-    # or falls back to a mock for development if nothing is provided
+    # Use explicit credentials if path is provided, otherwise check for JSON string, otherwise rely on GOOGLE_APPLICATION_CREDENTIALS
     cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+    cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
     try:
         if cred_path and os.path.exists(cred_path):
             cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+        elif cred_json:
+            import json
+            cred_dict = json.loads(cred_json)
+            cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
         else:
             firebase_admin.initialize_app()

@@ -44,7 +44,7 @@ interface RankedUser {
 export default function Dashboard() {
   const { user, role, zone } = useAuth();
 
-  const { rankedTable: rawData, latestActivity, isConnected, isLiveMode, liveAlerts } = useWebSocketData();
+  const { rankedTable: rawData, latestActivity, isConnected, liveAlerts } = useWebSocketData();
   const isValidating = !isConnected; // We show validating/connecting when not connected
   const isLoading = rawData.length === 0 && !isConnected;
 
@@ -329,44 +329,25 @@ export default function Dashboard() {
             <div className="premium-card overflow-hidden flex flex-col">
               <div className="px-6 pt-6 pb-2 flex items-center justify-between">
                 <h3 className="text-base font-display font-bold text-gray-900">
-                  {isLiveMode ? "Live Activity Stream" : "Historical Activity Trend"}
+                  Live Activity Stream
                 </h3>
-                {isLiveMode && (
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></div>
-                    Live
-                  </span>
-                )}
+                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></div>
+                  Live
+                </span>
               </div>
               <div className="px-6 mb-2">
-                {isLiveMode ? (
-                  <>
-                    <p className="text-[11px] text-gray-400 font-medium">New Activities Detected</p>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-display font-bold tracking-tight text-gray-900">
-                        {latestActivity || 0}
-                      </p>
-                      <p className="text-[12px] font-bold text-gray-500">per second</p>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Traffic is currently <span className={`font-bold ${(latestActivity || 0) > 15 ? 'text-orange-500' : 'text-emerald-500'}`}>{(latestActivity || 0) > 15 ? 'busy' : 'normal'}</span>. 
-                      Overall, we've safely tracked <span className="font-bold text-gray-700">{displayData.reduce((acc: number, user: RankedUser) => acc + ((user.total_contacts as number) || 0), 0).toLocaleString()}</span> contacts over time.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[11px] text-gray-400 font-medium">Weekly Network Activity</p>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-display font-bold tracking-tight text-gray-900">
-                        Monitoring
-                      </p>
-                      <p className="text-[12px] font-bold text-gray-500">long-term trends</p>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Visualizing exposure patterns over the last 60 days. Overall, we've safely tracked <span className="font-bold text-gray-700">{displayData.reduce((acc: number, user: RankedUser) => acc + ((user.total_contacts as number) || 0), 0).toLocaleString()}</span> contacts over time.
-                    </p>
-                  </>
-                )}
+                <p className="text-[11px] text-gray-400 font-medium">New Activities Detected</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-2xl font-display font-bold tracking-tight text-gray-900">
+                    {latestActivity || 0}
+                  </p>
+                  <p className="text-[12px] font-bold text-gray-500">per second</p>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Traffic is currently <span className={`font-bold ${(latestActivity || 0) > 15 ? 'text-orange-500' : 'text-emerald-500'}`}>{(latestActivity || 0) > 15 ? 'busy' : 'normal'}</span>. 
+                  Overall, we've safely tracked <span className="font-bold text-gray-700">{displayData.reduce((acc: number, user: RankedUser) => acc + ((user.total_contacts as number) || 0), 0).toLocaleString()}</span> contacts over time.
+                </p>
               </div>
               <div className="flex-1 h-48 px-2 pb-4 pt-4 relative">
                 <ActivityChart />
