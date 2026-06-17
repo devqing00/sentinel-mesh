@@ -18,9 +18,17 @@ from app.routes.ingest import clear_all_collections, ingest_all
 @router.post("/simulation/stop")
 async def api_stop_simulation():
     res = await stop_simulation()
-    # Reset DB to clean slate
-    await clear_all_collections()
-    await ingest_all()
+    
+    # Reset DB to clean slate in background to prevent HTTP timeouts
+    async def reset_db():
+        try:
+            await clear_all_collections()
+            await ingest_all()
+        except Exception as e:
+            print(f"[Simulation Stop Error] DB reset failed: {e}")
+            
+    import asyncio
+    asyncio.create_task(reset_db())
     return res
 
 class PingData(BaseModel):

@@ -243,18 +243,20 @@ async def get_activity_trend(user: dict = Depends(get_current_user)):
         {"$limit": 60}
     ]
     
-    cursor = db.mobility.aggregate(pipeline)
-    
     results = []
-    async for doc in cursor:
-        if not doc["_id"].get("year"):
-            continue
-        dt = datetime(doc["_id"]["year"], doc["_id"]["month"], doc["_id"]["day"])
-        results.append({
-            "date": dt.strftime("%a"),
-            "fullDate": dt.strftime("%b %d"),
-            "activity": doc["count"]
-        })
+    try:
+        cursor = db.mobility.aggregate(pipeline)
+        async for doc in cursor:
+            if not doc["_id"].get("year"):
+                continue
+            dt = datetime(doc["_id"]["year"], doc["_id"]["month"], doc["_id"]["day"])
+            results.append({
+                "date": dt.strftime("%a"),
+                "fullDate": dt.strftime("%b %d"),
+                "activity": doc["count"]
+            })
+    except Exception as e:
+        print(f"[Activity Trend Error] {e}")
         
     # Reverse so oldest is first
     results.reverse()
@@ -285,32 +287,36 @@ async def calculate_community_risks():
         "lat_sum": 0.0, "lon_sum": 0.0, "coord_count": 0
     })
 
-    vitals_cursor = db.vitals.find({})
-    async for doc in vitals_cursor:
-        gh = (doc.get("geohash") or "")[:4]
-        if not gh:
-            continue
-        did = doc.get("device_id", "")
-        clusters[gh]["devices"].add(did)
-        if (doc.get("temperature", 0) >= TEMP_THRESHOLD or
-                doc.get("heartbeat", 0) > HR_THRESHOLD or
-                doc.get("temp_status") == "high" or
-                doc.get("hr_status") == "high"):
-            clusters[gh]["anomalous"].add(did)
-        lat = doc.get("latitude") or doc.get("lat")
-        lon = doc.get("longitude") or doc.get("lon")
-        if lat and lon:
-            clusters[gh]["lat_sum"] += lat
-            clusters[gh]["lon_sum"] += lon
-            clusters[gh]["coord_count"] += 1
-
-    # Count contacts per cluster
     contact_counts: dict = defaultdict(int)
-    contacts_cursor = db.contacts.find({"proximity": "close"})
-    async for doc in contacts_cursor:
-        gh = (doc.get("geohash") or "")[:4]
-        if gh:
-            contact_counts[gh] += 1
+
+    try:
+        vitals_cursor = db.vitals.find({})
+        async for doc in vitals_cursor:
+            gh = (doc.get("geohash") or "")[:4]
+            if not gh:
+                continue
+            did = doc.get("device_id", "")
+            clusters[gh]["devices"].add(did)
+            if (doc.get("temperature", 0) >= TEMP_THRESHOLD or
+                    doc.get("heartbeat", 0) > HR_THRESHOLD or
+                    doc.get("temp_status") == "high" or
+                    doc.get("hr_status") == "high"):
+                clusters[gh]["anomalous"].add(did)
+            lat = doc.get("latitude") or doc.get("lat")
+            lon = doc.get("longitude") or doc.get("lon")
+            if lat and lon:
+                clusters[gh]["lat_sum"] += lat
+                clusters[gh]["lon_sum"] += lon
+                clusters[gh]["coord_count"] += 1
+
+        # Count contacts per cluster
+        contacts_cursor = db.contacts.find({"proximity": "close"})
+        async for doc in contacts_cursor:
+            gh = (doc.get("geohash") or "")[:4]
+            if gh:
+                contact_counts[gh] += 1
+    except Exception as e:
+        print(f"[Community Risk DB Error] {e}")
 
     results = []
     for gh, data in clusters.items():
@@ -338,7 +344,7 @@ async def calculate_community_risks():
         })
 
     results.sort(key=lambda x: x["risk_score"], reverse=True)
-    return results[:30]  # Top 30 clusters
+    return results  # Return all clusters
 
 
 async def get_anomalous_vitals_summary():

@@ -150,6 +150,7 @@ export default function GeographyPage() {
           mapStyle={`mapbox://styles/mapbox/${mapTheme}`}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
           interactive={true}
+          onClick={() => setSelectedCluster(null)}
         >
           {/* HOTSPOTS MODE */}
           <Source type="geojson" data={hotspotData as any}>
@@ -184,28 +185,28 @@ export default function GeographyPage() {
               latitude={selectedCluster.lat}
               anchor="bottom"
               onClose={() => setSelectedCluster(null)}
-              closeOnClick={false}
+              closeOnClick={true}
               className="z-50"
               maxWidth="300px"
             >
-              <div className="p-1 min-w-[200px]">
-                <h3 className="text-gray-900 font-bold text-base mb-1">{selectedCluster.name}</h3>
+              <div className="bg-[#111827] text-white p-4 rounded-xl shadow-2xl border border-gray-800 min-w-[220px]">
+                <h3 className="text-white font-bold text-base mb-1">{selectedCluster.name}</h3>
                 <div className="flex items-center gap-2 mb-3">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    selectedCluster.risk === 'Critical' ? 'bg-red-100 text-red-700' : 
-                    selectedCluster.risk === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+                    selectedCluster.risk === 'Critical' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+                    selectedCluster.risk === 'High' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   }`}>
                     {selectedCluster.risk} Risk
                   </span>
                 </div>
-                <div className="space-y-2 text-sm text-gray-700">
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-1">
-                    <span className="text-gray-500">Monitored Pop.</span>
-                    <span className="font-bold">{selectedCluster.pop}</span>
+                <div className="space-y-2 text-sm text-gray-300">
+                  <div className="flex justify-between items-center border-b border-gray-800 pb-1">
+                    <span className="text-gray-400">Monitored Pop.</span>
+                    <span className="font-bold text-white">{selectedCluster.pop}</span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-1">
-                    <span className="text-gray-500">Recent Anomalies</span>
-                    <span className="font-bold text-rose-600">{selectedCluster.anomalies}</span>
+                  <div className="flex justify-between items-center border-b border-gray-800 pb-1">
+                    <span className="text-gray-400">Recent Anomalies</span>
+                    <span className="font-bold text-rose-500">{selectedCluster.anomalies}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 mt-4">
@@ -216,7 +217,7 @@ export default function GeographyPage() {
                     <Ambulance className="w-4 h-4" />
                     Dispatch Agent
                   </button>
-                  <Link href="/audit" className="w-full flex items-center justify-center bg-gray-900 hover:bg-gray-800 text-white font-bold py-2 rounded-lg text-xs transition-colors">
+                  <Link href="/audit" className="w-full flex items-center justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-bold py-2 rounded-lg text-xs transition-colors">
                     View Detailed Audit
                   </Link>
                 </div>

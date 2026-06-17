@@ -1,7 +1,7 @@
 import os
 import requests
 
-os.environ["DATA_DIR"] = "c:/Users/QING/Desktop/Qing/sentinel-mesh"
+os.environ["DATA_DIR"] = "c:/Users/QING/Desktop/Qing/sentinel-mesh/data"
 
 response = requests.post("http://localhost:8000/api/ingest/all")
 print("Status Code:", response.status_code)

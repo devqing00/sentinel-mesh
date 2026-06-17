@@ -46,7 +46,7 @@ export default function RootLayout({
                     <ProtectedRoute>{children}</ProtectedRoute>
                   </main>
                 </div>
-                <Toaster position="bottom-center" theme="dark" />
+                <Toaster position="bottom-center" theme="dark" toastOptions={{ className: 'text-sm !w-auto !max-w-xs !p-3 !min-h-0' }} />
                 <GlobalAIPanel />
               </TooltipProvider>
             </WebSocketProvider>

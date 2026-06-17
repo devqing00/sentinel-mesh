@@ -44,7 +44,7 @@ interface RankedUser {
 export default function Dashboard() {
   const { user, role, zone } = useAuth();
 
-  const { rankedTable: rawData, latestActivity, isConnected, isLiveMode } = useWebSocketData();
+  const { rankedTable: rawData, latestActivity, isConnected, isLiveMode, liveAlerts } = useWebSocketData();
   const isValidating = !isConnected; // We show validating/connecting when not connected
   const isLoading = rawData.length === 0 && !isConnected;
 
@@ -386,7 +386,7 @@ export default function Dashboard() {
               </div>
 
               {/* Dark Gradient Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0b1021] via-[#0b1021]/60 to-transparent z-20 pointer-events-none transition-all duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0b1021] via-[#0b1021]/30 to-transparent z-20 pointer-events-none transition-all duration-300" />
 
               {/* Overlay Button */}
               <div className="absolute bottom-8 left-0 right-0 flex justify-center z-30 opacity-90 group-hover:opacity-100 transition-opacity">
@@ -441,35 +441,22 @@ export default function Dashboard() {
 
             <div className="flex-1 relative z-10 max-h-[250px] overflow-hidden group">
               <div className="space-y-5 pb-24">
-                {/* Alert 1 */}
-                <div className="relative pl-5 pb-5 border-l border-gray-200 last:border-0 last:pb-0">
-                  <div className="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-4 ring-red-50" />
-                  <p className="text-[10px] uppercase font-bold text-gray-400 mb-0.5 tracking-wider">Just now</p>
-                  <p className="text-sm font-bold text-gray-900">Proximity Breach Detected</p>
-                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                    Node <span className="font-mono text-xs bg-gray-100 px-1 rounded text-gray-800">U042</span> entered restricted boundary in Sector 4.
-                  </p>
-                </div>
-
-                {/* Alert 2 */}
-                <div className="relative pl-5 pb-5 border-l border-gray-200 last:border-0 last:pb-0">
-                  <div className="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-orange-400 ring-4 ring-orange-50" />
-                  <p className="text-[10px] uppercase font-bold text-gray-400 mb-0.5 tracking-wider">12 mins ago</p>
-                  <p className="text-sm font-bold text-gray-900">Elevated Temperature Warning</p>
-                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                    Multiple subjects exhibiting thermal readings above baseline in Transit Hub B.
-                  </p>
-                </div>
-
-                {/* Alert 3 */}
-                <div className="relative pl-5 pb-5 border-l border-gray-200 last:border-0 last:pb-0">
-                  <div className="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50" />
-                  <p className="text-[10px] uppercase font-bold text-gray-400 mb-0.5 tracking-wider">1 hr ago</p>
-                  <p className="text-sm font-bold text-gray-900">System Sync Completed</p>
-                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                    Data fully synchronized with central epidemiological database. All nodes active.
-                  </p>
-                </div>
+                {liveAlerts.length === 0 ? (
+                  <div className="text-sm text-gray-500 text-center py-4">No recent alerts</div>
+                ) : (
+                  liveAlerts.slice(0, 3).map((alert: any) => (
+                    <div key={alert.id} className="relative pl-5 pb-5 border-l border-gray-200 last:border-0 last:pb-0">
+                      <div className={`absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full ring-4 ${alert.type === 'anomaly' ? 'bg-rose-500 ring-rose-50' : 'bg-amber-500 ring-amber-50'}`} />
+                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-0.5 tracking-wider">
+                        {new Date(alert.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </p>
+                      <p className="text-sm font-bold text-gray-900">{alert.title}</p>
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                        {alert.message || alert.trigger_reason}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none z-10" />
               <div className="absolute bottom-6 left-0 right-0 flex justify-center z-20 opacity-90 group-hover:opacity-100 transition-opacity">

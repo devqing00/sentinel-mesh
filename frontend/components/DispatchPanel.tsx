@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MapPin, PhoneCall, ShieldCheck, Ambulance, Clock, Activity, Crosshair, X } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import useSWR from "swr";
 import { getAgents, getFacilities } from "@/lib/api";
 

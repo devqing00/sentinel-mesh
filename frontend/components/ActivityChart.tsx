@@ -21,13 +21,26 @@ interface ChartDataPoint {
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
+    const value = payload[0].value;
+    const time = payload[0].payload.time || payload[0].payload.date;
+    
+    let descriptor = "stable network activity";
+    if (value > 80) descriptor = "an extreme spike in tracking events";
+    else if (value > 50) descriptor = "elevated system activity";
+    else if (value < 10) descriptor = "unusually quiet network conditions";
+
     return (
-      <div className="bg-[#1e2336] border border-[#262c40] p-3 rounded-xl shadow-xl text-white">
-        <p className="text-xs text-slate-400 mb-1">{payload[0].payload.time || payload[0].payload.date}</p>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <p className="font-bold text-sm">
-            {payload[0].value} <span className="font-normal text-slate-300">events</span>
+      <div className="bg-[#1e2336] border border-[#262c40] p-4 rounded-xl shadow-xl text-white max-w-[200px]">
+        <p className="text-xs text-slate-400 mb-2">{time}</p>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${value > 50 ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'}`} />
+            <p className="font-bold text-lg leading-none">
+              {value} <span className="font-normal text-sm text-slate-300">events/sec</span>
+            </p>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed mt-1">
+            Indicating <span className="text-white font-medium">{descriptor}</span>.
           </p>
         </div>
       </div>

@@ -54,9 +54,9 @@ class SimpleGCN:
 
 def main():
     print("Loading data for Temporal GNN...")
-    vitals_path = os.path.join(os.path.dirname(__file__), "..", "vitals.csv")
-    mobility_path = os.path.join(os.path.dirname(__file__), "..", "mobility.csv")
-    contacts_path = os.path.join(os.path.dirname(__file__), "..", "contact_tracing.csv")
+    vitals_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "vitals.csv")
+    mobility_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "mobility.csv")
+    contacts_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "contact_tracing.csv")
     
     vitals = pd.read_csv(vitals_path)
     mobility = pd.read_csv(mobility_path)
@@ -139,7 +139,7 @@ def main():
         'user_to_idx': user_to_idx
     }
     
-    model_path = os.path.join(os.path.dirname(__file__), "app", "services", "gnn_model.json")
+    model_path = os.path.join(os.path.dirname(__file__), "..", "app", "services", "gnn_model.json")
     with open(model_path, "w") as f:
         json.dump(model_data, f)
     print(f"GNN Model successfully saved to {model_path}")

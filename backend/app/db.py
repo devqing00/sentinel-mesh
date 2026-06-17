@@ -13,7 +13,7 @@ class Database:
 db_instance = Database()
 
 async def connect_to_mongo():
-    db_instance.client = AsyncIOMotorClient(MONGO_URI)
+    db_instance.client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     db_name = MONGO_URI.rsplit("/", 1)[-1].split("?")[0]
     if not db_name or db_name == "localhost:27017":
         db_name = "sentinelmesh"

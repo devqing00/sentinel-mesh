@@ -45,8 +45,6 @@ async def device_simulation_task(db, device, base_lat, base_lon):
                 "proximity": "close" if contact_device else "none",
                 "timestamp": now
             }
-            await db.contacts.insert_one(contact_doc)
-
             # Generate Mobility
             mobility_doc = {
                 "user_id": device.replace("live_", "user_"),
@@ -62,7 +60,6 @@ async def device_simulation_task(db, device, base_lat, base_lon):
                 "close_contacts": random.randint(0, 5) if has_contact else 0,
                 "timestamp": now
             }
-            await db.mobility.insert_one(mobility_doc)
 
             # Generate Vitals
             is_anomalous = (device in ANOMALOUS_DEVICES) or (random.random() < 0.05)
@@ -87,7 +84,13 @@ async def device_simulation_task(db, device, base_lat, base_lon):
                 "battery": random.uniform(20, 100),
                 "timestamp": now
             }
-            await db.vitals.insert_one(vitals_doc)
+
+            try:
+                await db.contacts.insert_one(contact_doc)
+                await db.mobility.insert_one(mobility_doc)
+                await db.vitals.insert_one(vitals_doc)
+            except Exception as db_err:
+                print(f"[Simulation DB Sync Error] {db_err}")
 
             # Alert triggering via WebSocket
             if is_anomalous and manager.active_connections:
@@ -107,7 +110,7 @@ async def device_simulation_task(db, device, base_lat, base_lon):
             
             # Increment global activity
             global global_activity_counter
-            global_activity_counter += 1
+            global_activity_counter += random.randint(20, 50) if is_anomalous else 1
 
         except asyncio.CancelledError:
             break
@@ -141,7 +144,7 @@ async def activity_ticker_task():
 
 async def live_simulation_loop():
     """Main orchestrator for live simulation tasks."""
-    client = AsyncIOMotorClient(MONGO_URI)
+    client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     db_name = MONGO_URI.rsplit("/", 1)[-1].split("?")[0]
     if not db_name or db_name == "localhost:27017":
         db_name = "sentinelmesh"
