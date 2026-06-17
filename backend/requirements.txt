@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+motor
+pydantic
+python-dotenv
+networkx
+pandas
+httpx
+python-multipart
+firebase-admin
+websockets
+neo4j
