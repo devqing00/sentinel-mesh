@@ -7,10 +7,14 @@ from app.services.risk_scoring import score_all_users
 
 router = APIRouter()
 
-# Initialize Groq client
-# Fallback to an empty string to avoid crashes if ENV isn't loaded properly, 
-# though the user confirmed it's in the .env
-client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
+import httpx
+
+# Initialize Groq client with a timeout to prevent hanging if API is down
+api_key = os.getenv("GROQ_API_KEY", "").strip()
+client = AsyncGroq(
+    api_key=api_key or "invalid_key", 
+    timeout=httpx.Timeout(5.0)
+)
 
 class ChatMessage(BaseModel):
     role: str
@@ -66,6 +70,9 @@ async def chat_with_sentinel(req: ChatRequest):
         role = "assistant" if msg.role == "ai" else "user"
         groq_messages.append({"role": role, "content": msg.content})
     
+    if api_key == "":
+        return {"response": "Error: Groq API Key is not configured or invalid. AI features are offline.", "confidence": 0}
+        
     try:
         completion = await client.chat.completions.create(
             messages=groq_messages,
@@ -140,6 +147,12 @@ async def get_dashboard_insight():
     escalating = len([u for u in users if u["category"] == "escalating"])
     top_user = users[0] if users else None
     
+    if api_key == "":
+        return {
+            "insight": f"Live AI insight unavailable (missing API key). Currently {escalating} users need attention.", 
+            "severity": "critical" if escalating > 0 else "info"
+        }
+    
     system_prompt = f"""
     You are Sentinel AI. Generate exactly ONE short, punchy, 2-sentence insight about the current network status for a dashboard widget. Do not use pleasantries.
     Data: {escalating} escalating users. Top user risk: {top_user['phase2_risk'] if top_user else 0} at {top_user['top_geo'] if top_user else 'N/A'}.
@@ -155,7 +168,7 @@ async def get_dashboard_insight():
         insight = completion.choices[0].message.content
         severity = "critical" if escalating > 0 else "info"
     except Exception as e:
-        insight = "Live AI insights temporarily unavailable."
+        insight = f"Live AI insights temporarily unavailable. Currently {escalating} users need attention."
         severity = "warning"
         
     return {"insight": insight, "severity": severity}

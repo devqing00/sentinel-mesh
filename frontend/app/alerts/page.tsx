@@ -29,6 +29,9 @@ import {
 import RankedUserTable from "@/components/RankedUserTable";
 import DispatchPanel from "@/components/DispatchPanel";
 
+import useSWR from "swr";
+import { useWebSocketData } from "@/context/WebSocketContext";
+
 interface RiskCluster {
   cluster_id: string;
   lat: number;
@@ -40,8 +43,16 @@ interface RiskCluster {
 }
 
 export default function AlertsPage() {
-  const [clusters, setClusters] = useState<RiskCluster[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: clusterData, isLoading: loading } = useSWR("/api/risk/communities", async () => {
+    const res = await getCommunityRisks();
+    return res.data;
+  }, { refreshInterval: 5000 });
+
+  const clusters: RiskCluster[] = Array.isArray(clusterData) ? clusterData : [];
+  
+  const { rankedTable: rankedData, isConnected } = useWebSocketData();
+  const rankedLoading = !isConnected && rankedData.length === 0;
+
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<Record<string, string> | null>(null);
   const [sormasData, setSormasData] = useState<any>(null);
@@ -51,38 +62,10 @@ export default function AlertsPage() {
   const [exporting, setExporting] = useState(false);
   const [dispatchingTarget, setDispatchingTarget] = useState<string | null>(null);
 
-  const [rankedData, setRankedData] = useState<any[]>([]);
-  const [rankedLoading, setRankedLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await getRankedTable();
-        const table = res.data?.ranked_table;
-        setRankedData(Array.isArray(table) ? table : []);
-      } catch (e) {
-        console.error("Failed to load ranked table:", e);
-      }
-      setRankedLoading(false);
-    })();
-  }, []);
-
   // Only show users that actually need attention
   const attentionData = rankedData.filter(
     (d: any) => d.category === "escalating" || d.category === "persistently-high"
   );
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await getCommunityRisks();
-        setClusters(Array.isArray(res.data) ? res.data : []);
-      } catch (e) {
-        console.error(e);
-      }
-      setLoading(false);
-    })();
-  }, []);
 
   const handleGenerateAlerts = async (clusterId: string) => {
     setGenerating(true);
@@ -139,7 +122,7 @@ export default function AlertsPage() {
         <div className="px-8 py-4 flex items-center justify-between">
           <h1 className="text-xl font-display font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-rose-500" />
-            Alerts & Response
+            Community Health Watch
           </h1>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-100 shadow-sm text-xs font-bold text-rose-600">
             <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
@@ -152,7 +135,7 @@ export default function AlertsPage() {
         {/* Page Heading */}
         <div>
           <h2 className="text-3xl font-display font-extrabold text-gray-900 tracking-tight drop-shadow-sm mb-1">
-            Community Alerts
+            Affected Neighborhoods
           </h2>
           <p className="text-sm text-gray-500">
             Monitor high-risk individuals, generate localized broadcasts, and escalate to public health systems.
@@ -163,9 +146,9 @@ export default function AlertsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Active Regions", value: clusters.length, icon: Globe, color: "text-indigo-500", bg: "bg-indigo-50" },
-            { label: "Critical Clusters", value: criticalClusters, icon: Zap, color: "text-rose-500", bg: "bg-rose-50" },
-            { label: "Total Anomalies", value: totalAnomalies, icon: Activity, color: "text-amber-500", bg: "bg-amber-50" },
-            { label: "High-Risk People", value: attentionData.length, icon: Users, color: "text-purple-500", bg: "bg-purple-50" },
+            { label: "Critical Neighborhoods", value: criticalClusters, icon: Zap, color: "text-rose-500", bg: "bg-rose-50" },
+            { label: "Total Unusual Readings", value: totalAnomalies, icon: Activity, color: "text-amber-500", bg: "bg-amber-50" },
+            { label: "People Needing Care", value: attentionData.length, icon: Users, color: "text-purple-500", bg: "bg-purple-50" },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
@@ -187,14 +170,14 @@ export default function AlertsPage() {
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-rose-500" />
-              People Needing Attention
+              People Needing Care
             </h3>
             <div className="flex items-center gap-4">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-100 px-3 py-1 rounded-full">
                 Ranked by Risk
               </span>
               <Link href="/network" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors">
-                See Network
+                See Contact Tracing Map
                 <TrendingUp className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -223,9 +206,9 @@ export default function AlertsPage() {
             <div className="p-6 border-b border-gray-100 bg-white/50 backdrop-blur-sm rounded-t-[1.5rem]">
               <h3 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-indigo-500" />
-                Risk Clusters
+                Affected Neighborhoods
               </h3>
-              <p className="text-xs text-gray-500 mt-1">Select a cluster to generate alerts or push a notification.</p>
+              <p className="text-xs text-gray-500 mt-1">Select a neighborhood to generate warnings or alert the health system.</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/30">
               {loading ? (
@@ -295,7 +278,7 @@ export default function AlertsPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
                           >
                             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
-                            Localize
+                            Draft Local Warning
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleExportSormas(c.cluster_id); }}
@@ -303,7 +286,7 @@ export default function AlertsPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 hover:bg-gray-100 text-xs font-bold rounded-lg border border-gray-200 transition-colors disabled:opacity-50"
                           >
                             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                            SORMAS Export
+                            Send to Health System
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleTriggerNotify(c.cluster_id); }}
@@ -318,7 +301,7 @@ export default function AlertsPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-sm shadow-emerald-500/20 transition-colors"
                           >
                             <Ambulance className="w-4 h-4" />
-                            Dispatch Team
+                            Send Health Workers
                           </button>
                         </div>
                       )}

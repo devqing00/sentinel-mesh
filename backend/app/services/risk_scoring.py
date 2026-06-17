@@ -2,9 +2,8 @@ import os
 from datetime import datetime, timezone
 from collections import defaultdict
 from app.db import get_database
-
-
 import asyncio
+import pymongo.errors
 
 async def score_all_users(start_date=None, end_date=None, split_date=None, force_refresh=False):
     """
@@ -46,9 +45,26 @@ async def score_all_users(start_date=None, end_date=None, split_date=None, force
         "geohashes": defaultdict(int)
     })
 
+    async def fetch_with_retry(collection, query, projection=None, max_retries=3, limit=500):
+        for attempt in range(max_retries):
+            try:
+                cursor = collection.find(query, projection) if projection else collection.find(query)
+                cursor = cursor.limit(limit)
+                return await cursor.to_list(length=limit)
+            except pymongo.errors.AutoReconnect as e:
+                print(f"Attempt {attempt+1} failed for {collection.name} with AutoReconnect: {e}")
+                if attempt == max_retries - 1:
+                    raise e
+                await asyncio.sleep(2 ** attempt)
+            except Exception as e:
+                print(f"Attempt {attempt+1} failed for {collection.name} with error: {e}")
+                if attempt == max_retries - 1:
+                    raise e
+                await asyncio.sleep(2 ** attempt)
+
     # 1. Process Mobility Data
-    mob_cursor = db.mobility.find({})
-    async for doc in mob_cursor:
+    mob_docs = await fetch_with_retry(db.mobility, {}, {"user_id": 1, "timestamp": 1, "exposure_score": 1, "geohash": 1, "_id": 0})
+    for doc in mob_docs:
         uid = doc["user_id"]
         # Convert doc timestamp to aware datetime if it's naive
         ts = doc["timestamp"]
@@ -67,9 +83,11 @@ async def score_all_users(start_date=None, end_date=None, split_date=None, force
             user_metrics[uid]["geohashes"][doc["geohash"][:4]] += 1
 
     # 2. Process Contact Data
-    contact_cursor = db.contacts.find({})
-    async for doc in contact_cursor:
-        uid = doc["user_id"]
+    contact_docs = await fetch_with_retry(db.contacts, {}, {"user_id": 1, "timestamp": 1, "geohash": 1, "_id": 0})
+    for doc in contact_docs:
+        uid = doc.get("user_id")
+        if not uid:
+            continue
         ts = doc["timestamp"]
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -83,16 +101,23 @@ async def score_all_users(start_date=None, end_date=None, split_date=None, force
             user_metrics[uid]["geohashes"][doc["geohash"][:4]] += 1
 
     # 3. Process Vitals Anomalies
-    vitals_cursor = db.vitals.find({
-        "$or": [
-            {"temperature": {"$gte": TEMP_THRESHOLD}},
-            {"temp_status": "high"},
-            {"heartbeat": {"$gt": HR_THRESHOLD}},
-            {"hr_status": "high"},
-        ]
-    })
-    async for doc in vitals_cursor:
-        mac = doc["device_id"]
+    vitals_docs = await fetch_with_retry(
+        db.vitals, 
+        {}, 
+        {"device_id": 1, "timestamp": 1, "temperature": 1, "temp_status": 1, "heartbeat": 1, "hr_status": 1, "_id": 0}
+    )
+    for doc in vitals_docs:
+        is_anomalous = (
+            doc.get("temperature", 0) >= TEMP_THRESHOLD or
+            doc.get("temp_status") == "high" or
+            doc.get("heartbeat", 0) > HR_THRESHOLD or
+            doc.get("hr_status") == "high"
+        )
+        if not is_anomalous:
+            continue
+        
+        mac = doc.get("device_id")
+        if not mac: continue
         # Map device_id to user_id (e.g. D009 -> U009)
         uid = mac.replace("D", "U")
         
@@ -118,39 +143,42 @@ async def score_all_users(start_date=None, end_date=None, split_date=None, force
 
     ranked_table = []
     
-    for uid, data in user_metrics.items():
-        # Feature extraction
+    uids = list(user_metrics.keys())
+    
+    if model and uids:
+        # Batch predictions for all users at once
+        p1_features = []
+        p2_features = []
+        
+        for uid in uids:
+            data = user_metrics[uid]
+            p1_vitals = data["phase1"]["vitals_anomalies"]
+            p1_contacts = data["phase1"]["contacts"]
+            total_vitals = p1_vitals + data["phase2"]["vitals_anomalies"]
+            total_contacts = p1_contacts + data["phase2"]["contacts"]
+            traj_shift = len(data["geohashes"]) * 10
+            
+            p1_features.append({'vitals_anomalies': p1_vitals, 'direct_contacts': p1_contacts, 'trajectory_shift': traj_shift})
+            p2_features.append({'vitals_anomalies': total_vitals, 'direct_contacts': total_contacts, 'trajectory_shift': traj_shift})
+            
+        p1_preds = model.predict(pd.DataFrame(p1_features))
+        p2_preds = model.predict(pd.DataFrame(p2_features))
+    else:
+        p1_preds = []
+        p2_preds = []
+
+    for idx, uid in enumerate(uids):
+        data = user_metrics[uid]
         p1_vitals = data["phase1"]["vitals_anomalies"]
         p1_contacts = data["phase1"]["contacts"]
-        p2_vitals = data["phase2"]["vitals_anomalies"]
-        p2_contacts = data["phase2"]["contacts"]
-        
-        total_vitals = p1_vitals + p2_vitals
-        total_contacts = p1_contacts + p2_contacts
-        
-        # Simple trajectory shift proxy for inference
-        traj_shift = len(data["geohashes"]) * 10
+        total_vitals = p1_vitals + data["phase2"]["vitals_anomalies"]
+        total_contacts = p1_contacts + data["phase2"]["contacts"]
         
         if model:
-            # Predict Phase 1 Risk (Historical Baseline)
-            X1 = pd.DataFrame([{
-                'vitals_anomalies': p1_vitals,
-                'direct_contacts': p1_contacts,
-                'trajectory_shift': traj_shift
-            }])
-            p1_risk = float(model.predict(X1)[0])
-            
-            # Predict Current Cumulative Risk
-            X2 = pd.DataFrame([{
-                'vitals_anomalies': total_vitals,
-                'direct_contacts': total_contacts,
-                'trajectory_shift': traj_shift
-            }])
-            p2_risk = float(model.predict(X2)[0])
-            
-            confidence = 0.94 # Static for now
+            p1_risk = float(p1_preds[idx])
+            p2_risk = float(p2_preds[idx])
+            confidence = 0.94
         else:
-            # Fallback to mock
             p1_risk = min(100.0, p1_vitals * 5 + p1_contacts * 2)
             p2_risk = min(100.0, total_vitals * 5 + total_contacts * 2)
             confidence = 0.5

@@ -23,10 +23,8 @@ async def broadcast_task():
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
     b_task = asyncio.create_task(broadcast_task())
-    sim_task = asyncio.create_task(live_simulation_loop())
     yield
     b_task.cancel()
-    sim_task.cancel()
     await close_mongo_connection()
 
 app = FastAPI(

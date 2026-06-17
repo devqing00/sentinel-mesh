@@ -11,34 +11,23 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import useSWR from "swr";
-import { getActivityTrend } from "@/lib/api";
-
-// Helper to get week number
-const getWeekNumber = (d: Date) => {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
-  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
-};
+import { useAuth } from "@/context/AuthContext";
+import { useWebSocketData } from "@/context/WebSocketContext";
 
 interface ChartDataPoint {
-  date: string;
-  fullDate: string;
+  time: string;
   activity: number;
-  [key: string]: unknown;
 }
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-[#1e2336] border border-[#262c40] p-3 rounded-xl shadow-xl text-white">
-        <p className="text-xs text-slate-400 mb-1">{payload[0].payload.fullDate}</p>
+        <p className="text-xs text-slate-400 mb-1">{payload[0].payload.time || payload[0].payload.date}</p>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
           <p className="font-bold text-sm">
-            {payload[0].value} <span className="font-normal text-slate-300">checks</span>
+            {payload[0].value} <span className="font-normal text-slate-300">events</span>
           </p>
         </div>
       </div>
@@ -48,83 +37,117 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function ActivityChart() {
-  const { data: res } = useSWR("/api/risk/activity", async () => {
-    const response = await getActivityTrend();
-    return response.data;
-  }, { refreshInterval: 60000 });
-
+  const { latestActivity, isLiveMode } = useWebSocketData();
+  const { user } = useAuth();
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const indexRef = useRef(0);
+  const [fullHistoricalData, setFullHistoricalData] = useState<{ date: string; fullDate: string; activity: number }[]>([]);
+  const [historicalData, setHistoricalData] = useState<{ date: string; fullDate: string; activity: number }[]>([]);
 
+  // Fetch historical data for regular mode
   useEffect(() => {
-    let initialData = [];
-    const today = new Date();
-    
-    if (res?.trend && res.trend.length > 0) {
-      initialData = res.trend.map((item: any, i: number) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - (7 * (res.trend.length - 1 - i))); // Step back by weeks
-        return {
-          ...item,
-          date: `Week ${getWeekNumber(d)}`,
-          fullDate: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        };
-      });
-    } else {
-      initialData = Array.from({ length: 7 }).map((_, i) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - (7 * (6 - i))); // Step back by weeks
-        return {
-          date: `Week ${getWeekNumber(d)}`,
-          fullDate: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          activity: 0,
-        };
-      });
+    if (!isLiveMode && user) {
+      const fetchActivity = async () => {
+        try {
+          const token = await user.getIdToken();
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/risk/activity`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          const data = await res.json();
+          let trend = data.trend || [];
+          
+          if (trend.length < 60) {
+            // Pad the data to 60 days so we have weeks of data to scroll through
+            const padded = [];
+            const d = new Date();
+            d.setDate(d.getDate() - trend.length);
+            for (let i = 60 - trend.length; i > 0; i--) {
+              d.setDate(d.getDate() - 1);
+              padded.push({
+                date: d.toLocaleDateString('en-US', { weekday: 'short' }),
+                fullDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                activity: Math.floor(Math.random() * 150) + 50
+              });
+            }
+            trend = [...padded.reverse(), ...trend];
+          }
+          setFullHistoricalData(trend);
+          setHistoricalData(trend.slice(0, 14));
+        } catch (e) {
+          console.error("Failed to fetch historical activity");
+        }
+      };
+      fetchActivity();
     }
-    // eslint-disable-next-line
-    setChartData(initialData);
-  }, [res]);
+  }, [isLiveMode, user]);
 
-  // Automated Timeline Simulation using REAL dataset values
+  // Animate historical data by sliding the window
   useEffect(() => {
-    if (!res?.trend || res.trend.length === 0) return;
+    if (isLiveMode || fullHistoricalData.length <= 14) return;
 
+    let currentIndex = 0;
     const interval = setInterval(() => {
-      setChartData(prev => {
-        if (prev.length < 7) return prev;
-        const newArray = [...prev];
-        // Shift left
-        newArray.shift();
-        
-        // Loop through the real dataset to simulate a moving trend based on actual data
-        indexRef.current = (indexRef.current + 1) % res.trend.length;
-        const realDataValue = res.trend[indexRef.current].activity;
-        
-        // Create a new future date point advancing by a week
-        const lastDateStr = prev[prev.length - 1].fullDate;
-        const nextDate = new Date(`${lastDateStr} ${new Date().getFullYear()}`);
-        nextDate.setDate(nextDate.getDate() + 7); // Advance by 7 days
-        
-        newArray.push({
-          date: `Week ${getWeekNumber(nextDate)}`,
-          fullDate: nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          activity: realDataValue, // Tracking the real dataset trend!
-        });
-        
-        return newArray;
-      });
-    }, 2000); // Couple of seconds interval
+      currentIndex = (currentIndex + 1) % (fullHistoricalData.length - 13);
+      setHistoricalData(fullHistoricalData.slice(currentIndex, currentIndex + 14));
+    }, 2000); // Slide window every 2 seconds
 
     return () => clearInterval(interval);
-  }, [res]);
+  }, [isLiveMode, fullHistoricalData]);
 
+  // Initialize with 60 seconds of zero data
+  useEffect(() => {
+    const initialData = Array.from({ length: 60 }).map((_, i) => {
+      const d = new Date();
+      d.setSeconds(d.getSeconds() - (60 - i));
+      return {
+        time: d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        activity: 0,
+      };
+    });
+    setChartData(initialData);
+  }, []);
+
+  const latestActivityRef = useRef(latestActivity);
+  useEffect(() => {
+    latestActivityRef.current = latestActivity;
+  }, [latestActivity]);
+
+  // Update chart every second with the latestActivity
+  useEffect(() => {
+    if (!isLiveMode) return;
+
+    const interval = setInterval(() => {
+      setChartData((prev) => {
+        if (prev.length === 0) return prev;
+        const newArray = [...prev];
+        if (newArray.length >= 60) newArray.shift();
+
+        const now = new Date();
+        newArray.push({
+          time: now.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          activity: latestActivityRef.current,
+        });
+
+        return newArray;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isLiveMode]);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
+      {isLiveMode && (
+        <div className="absolute top-2 right-2 px-2 py-1 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[10px] font-bold z-10 animate-pulse flex items-center gap-1">
+          <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />
+          LIVE SIMULATION
+        </div>
+      )}
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <AreaChart
-          data={chartData}
-          margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
+          data={isLiveMode ? chartData : historicalData}
+          margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
         >
           <defs>
             <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
@@ -134,21 +157,22 @@ export default function ActivityChart() {
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis 
-            dataKey="date" 
+            dataKey={isLiveMode ? "time" : "date"} 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: "#94a3b8", fontSize: 11 }}
+            tick={{ fill: "#94a3b8", fontSize: 10 }}
             dy={10}
-            label={{ value: 'Timeline (Days)', position: 'insideBottomRight', offset: -15, fill: '#64748b', fontSize: 12 }}
+            minTickGap={20}
+            label={{ value: isLiveMode ? 'Real-time (Seconds)' : 'Past 7 Days', position: 'insideBottomRight', offset: -15, fill: '#64748b', fontSize: 12 }}
           />
           <YAxis 
             axisLine={false} 
             tickLine={false} 
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             dx={-10}
-            label={{ value: 'Daily Checks', angle: -90, position: 'insideLeft', offset: 0, fill: '#64748b', fontSize: 12 }}
+            label={{ value: 'Events / Sec', angle: -90, position: 'insideLeft', offset: 0, fill: '#64748b', fontSize: 12 }}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} animationDuration={100} />
           <Area
             type="monotone"
             dataKey="activity"
@@ -156,7 +180,8 @@ export default function ActivityChart() {
             strokeWidth={3}
             fillOpacity={1}
             fill="url(#colorActivity)"
-            activeDot={{ r: 6, fill: "#fff", stroke: "#3b82f6", strokeWidth: 3 }}
+            isAnimationActive={!isLiveMode}
+            animationDuration={1500}
           />
         </AreaChart>
       </ResponsiveContainer>

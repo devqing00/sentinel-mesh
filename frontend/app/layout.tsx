@@ -6,7 +6,7 @@ import { WebSocketProvider } from "@/context/WebSocketContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Sidebar from "@/components/Sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "sonner";
 
 import GlobalAIPanel from "@/components/GlobalAIPanel";
 
@@ -46,7 +46,7 @@ export default function RootLayout({
                     <ProtectedRoute>{children}</ProtectedRoute>
                   </main>
                 </div>
-                <Toaster position="bottom-right" />
+                <Toaster position="bottom-center" theme="dark" />
                 <GlobalAIPanel />
               </TooltipProvider>
             </WebSocketProvider>

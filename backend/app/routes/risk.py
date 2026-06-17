@@ -107,15 +107,24 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             return
 
     await manager.connect(websocket)
+    db = get_database()
     try:
-        # Instantly send the current ranked table upon connection
-        ranked_table = await score_all_users()
-        await websocket.send_json({"type": "ranked_table", "data": ranked_table})
-        
         while True:
-            # Keep connection alive
-            await websocket.receive_text()
-    except WebSocketDisconnect:
+            try:
+                # Check for cache hit
+                cache_doc = await db.system_cache.find_one({"_id": "ranked_users_cache"})
+                ranked_table = []
+                
+                if cache_doc and "data" in cache_doc:
+                    ranked_table = cache_doc["data"]
+                
+                await websocket.send_json({"type": "ranked_table", "data": ranked_table})
+                await asyncio.sleep(2)
+            except (Exception, WebSocketDisconnect):
+                break
+    except Exception:
+        pass
+    finally:
         manager.disconnect(websocket)
 
 
@@ -231,7 +240,7 @@ async def get_activity_trend(user: dict = Depends(get_current_user)):
             "count": {"$sum": 1}
         }},
         {"$sort": {"_id.year": -1, "_id.month": -1, "_id.day": -1}},
-        {"$limit": 7}
+        {"$limit": 60}
     ]
     
     cursor = db.mobility.aggregate(pipeline)

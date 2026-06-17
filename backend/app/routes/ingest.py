@@ -139,6 +139,14 @@ async def ingest_vitals():
     return {"status": "ok", "collection": "vitals", "records_inserted": len(records)}
 
 
+@router.post("/clear_all")
+async def clear_all_collections():
+    """Clear anomalies and audit logs manually"""
+    db = get_database()
+    await db.anomalies.delete_many({})
+    await db.audit_log.delete_many({})
+    return {"status": "ok", "message": "Anomalies and Audit logs cleared"}
+
 @router.post("/all")
 async def ingest_all():
     """Seed all three datasets from CSV files on disk."""

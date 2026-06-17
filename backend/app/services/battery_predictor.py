@@ -22,6 +22,8 @@ async def get_battery_predictions():
                 "battery": "$battery",
                 "timestamp": "$timestamp",
                 "movement": "$movement",
+                "temperature": "$temperature",
+                "heartbeat": "$heartbeat"
             }},
             "latest_battery": {"$last": "$battery"},
             "first_battery": {"$first": "$battery"},
@@ -93,6 +95,7 @@ async def get_battery_predictions():
             "geohash": doc["latest_geohash"],
             "lat": doc["latest_lat"],
             "lon": doc["latest_lon"],
+            "vitals_history": doc.get("readings", [])[-20:] # Only return the last 20 readings for the chart
         })
 
     # Sort: dead first, then critical, then needs_visit, then ok

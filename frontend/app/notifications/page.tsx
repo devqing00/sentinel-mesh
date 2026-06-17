@@ -16,9 +16,11 @@ import useSWR from "swr";
 import { getAuditLog } from "@/lib/api";
 import Link from "next/link";
 
+import { useWebSocketData } from "@/context/WebSocketContext";
+
 const TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; border: string; label: string }> = {
-  anomaly: { icon: AlertTriangle, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", label: "Anomaly" },
-  system:  { icon: Activity,      color: "text-blue-500",  bg: "bg-blue-50",  border: "border-blue-100",  label: "System"  },
+  anomaly: { icon: AlertTriangle, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", label: "Unusual Reading" },
+  system:  { icon: Activity,      color: "text-blue-500",  bg: "bg-blue-50",  border: "border-blue-100",  label: "System Update"  },
   hardware:{ icon: Cpu,           color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", label: "Hardware"},
   security:{ icon: ShieldAlert,   color: "text-emerald-500",bg:"bg-emerald-50",border:"border-emerald-100",label:"Security"},
 };
@@ -33,7 +35,7 @@ function timeAgo(ts: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const FILTERS = ["All", "Anomaly", "System", "Hardware", "Security"];
+const FILTERS = ["All", "Unusual Reading", "System Update", "Hardware", "Security"];
 
 export default function NotificationsPage() {
   const { data: res } = useSWR("/api/audit/log", async () => {
@@ -41,15 +43,32 @@ export default function NotificationsPage() {
     return r.data;
   }, { refreshInterval: 8000 });
 
+  const { liveAlerts } = useWebSocketData();
+
   const [localReadState, setLocalReadState] = useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const rawEntries: any[] = res?.entries || [];
 
-  const notifications = rawEntries.map((n: any) => {
+  // Merge live WebSocket alerts with the fetched audit log, avoiding duplicates by id
+  const mergedEntries = [...liveAlerts];
+  const liveAlertIds = new Set(liveAlerts.map(a => a.id));
+  for (const entry of rawEntries) {
+    const id = entry._id || (entry.title + entry.timestamp);
+    if (!liveAlertIds.has(id)) {
+      mergedEntries.push({ ...entry, id });
+    }
+  }
+
+  // Sort by timestamp descending
+  mergedEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const notifications = mergedEntries.map((n: any) => {
     const type = n.type || "system";
     const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.system;
-    const id = n._id || (n.title + n.timestamp);
+    const id = n.id;
     const isRead = localReadState[id] !== undefined ? localReadState[id] : (n.read ?? false);
     return { ...n, id, type, cfg, unread: !isRead };
   });
@@ -57,6 +76,9 @@ export default function NotificationsPage() {
   const filtered = activeFilter === "All"
     ? notifications
     : notifications.filter(n => n.cfg.label === activeFilter);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
@@ -67,6 +89,11 @@ export default function NotificationsPage() {
   };
 
   const markRead = (id: string) => setLocalReadState(prev => ({ ...prev, [id]: true }));
+
+  const handleFilterChange = (f: string) => {
+    setActiveFilter(f);
+    setCurrentPage(1);
+  };
 
   return (
     <div className="h-full flex flex-col bg-transparent overflow-hidden">
@@ -100,10 +127,10 @@ export default function NotificationsPage() {
           <div className="flex items-end justify-between">
             <div>
               <h2 className="text-3xl font-display font-extrabold text-gray-900 tracking-tight drop-shadow-sm mb-1">
-                Inbox
+                Recent Activity
               </h2>
               <p className="text-sm text-gray-500">
-                Live system events — anomalies, hardware changes, and broadcasts.
+                Live system events — unusual readings, hardware updates, and broadcasts.
               </p>
             </div>
             {unreadCount > 0 && (
@@ -123,7 +150,7 @@ export default function NotificationsPage() {
             {FILTERS.map(f => (
               <button
                 key={f}
-                onClick={() => setActiveFilter(f)}
+                onClick={() => handleFilterChange(f)}
                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${
                   activeFilter === f
                     ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
@@ -141,12 +168,12 @@ export default function NotificationsPage() {
               <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center mb-4">
                 <Bell className="w-9 h-9 text-gray-300" />
               </div>
-              <h3 className="text-lg font-display font-bold text-gray-800 mb-1">No Notifications</h3>
-              <p className="text-sm text-gray-500">Nothing here yet. Events will appear as they happen.</p>
+              <h3 className="text-lg font-display font-bold text-gray-800 mb-1">All quiet right now</h3>
+              <p className="text-sm text-gray-500">We'll let you know if anything unusual happens.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((n) => {
+              {paginatedData.map((n) => {
                 const Icon = n.cfg.icon;
                 return (
                   <div
@@ -219,7 +246,7 @@ export default function NotificationsPage() {
                               onClick={(e) => e.stopPropagation()}
                               className="px-4 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 text-xs font-bold rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
                             >
-                              Manage Alert <ArrowRight className="w-3 h-3" />
+                              Review Case <ArrowRight className="w-3 h-3" />
                             </Link>
                           </div>
                         )}
@@ -231,9 +258,32 @@ export default function NotificationsPage() {
             </div>
           )}
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 pb-8">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-sm font-bold text-gray-500">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
           {/* Footer link */}
           {filtered.length > 0 && (
-            <div className="text-center pt-4">
+            <div className="text-center pt-4 pb-8">
               <Link href="/audit" className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-2 justify-center">
                 View Full Audit Trail <ArrowRight className="w-4 h-4" />
               </Link>

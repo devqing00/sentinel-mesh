@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   MapPin,
 } from "lucide-react";
+import { ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 
 interface DeviceHealth {
   device_id: string;
@@ -32,6 +33,7 @@ interface DeviceHealth {
   temp_status: string;
   hr_status: string;
   geohash: string;
+  vitals_history?: any[];
 }
 
 export default function DevicesPage() {
@@ -98,6 +100,16 @@ export default function DevicesPage() {
   const totalDevices = devices.length;
   const criticalCount = devices.filter(d => d.status === "critical" || d.battery_percent <= 15).length;
   const needsVisitCount = devices.filter(d => d.status === "needs_visit" || d.status === "dead").length;
+
+  const prepareChartData = (vitals: any[]) => {
+    if (!vitals || vitals.length === 0) return [];
+    const sorted = [...vitals].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return sorted.map(v => ({
+      time: new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      temp: v.temperature,
+      hr: v.heartbeat,
+    }));
+  };
 
   return (
     <div className="h-full flex flex-col bg-transparent overflow-hidden">
@@ -203,7 +215,14 @@ export default function DevicesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
             {filteredDevices.map((device) => (
-              <div key={device.device_id} className="premium-card flex flex-col justify-between group overflow-hidden cursor-pointer hover:border-indigo-200">
+              <div 
+                key={device.device_id} 
+                className={`premium-card flex flex-col justify-between group overflow-hidden cursor-pointer transition-all ${
+                  (device.status === 'dead' || device.status === 'critical')
+                    ? 'border-rose-500/80 shadow-[0_0_20px_rgba(244,63,94,0.4)] hover:border-rose-400 hover:shadow-[0_0_25px_rgba(244,63,94,0.6)]'
+                    : 'hover:border-indigo-200'
+                }`}
+              >
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-5">
                     <div className="flex items-center gap-3">
@@ -250,7 +269,7 @@ export default function DevicesPage() {
                   </div>
 
                   {/* Sensors Row */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-white rounded-xl p-3 border border-gray-100 shadow-sm flex flex-col items-center">
                       <div className="flex items-center gap-1.5 mb-1 text-gray-400">
                         <Heart className={`w-3.5 h-3.5 ${device.hr_status === 'anomalous' ? 'text-rose-500 animate-pulse' : ''}`} />
@@ -271,6 +290,32 @@ export default function DevicesPage() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Vitals Chart */}
+                  {device.vitals_history && device.vitals_history.length > 0 && (
+                    <div className="h-32 w-full mt-2 bg-gray-50/30 rounded-xl p-2 border border-gray-100">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={prepareChartData(device.vitals_history)} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id={`colorHr-${device.device_id}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0.1}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '10px' }}
+                            itemStyle={{ padding: '2px 0' }}
+                            labelStyle={{ color: '#64748b' }}
+                          />
+                          <Bar dataKey="hr" name="HR" fill={`url(#colorHr-${device.device_id})`} radius={[2, 2, 0, 0]} maxBarSize={20} yAxisId="right" />
+                          <Line type="monotone" dataKey="temp" name="Temp" stroke="#F43F5E" strokeWidth={2} dot={false} activeDot={{ r: 4 }} yAxisId="left" />
+                          <YAxis yAxisId="left" hide domain={['dataMin - 1', 'dataMax + 1']} />
+                          <YAxis yAxisId="right" hide orientation="right" domain={[60, 160]} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer status / Action */}
