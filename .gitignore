@@ -8,6 +8,7 @@ sentinel-mesh-firebase-adminsdk-*.json
 
 # Data
 *.csv
+!data/*.csv
 
 # Node / Frontend
 node_modules/
