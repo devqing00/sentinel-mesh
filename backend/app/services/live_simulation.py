@@ -17,8 +17,8 @@ async def device_simulation_task(db, device, base_lat, base_lon):
     
     while True:
         try:
-            # Sleep spontaneously
-            sleep_time = random.uniform(2.0, 15.0)
+            # Sleep spontaneously but fast so it "gushes"
+            sleep_time = random.uniform(0.1, 1.5)
             await asyncio.sleep(sleep_time)
 
             now = datetime.utcnow()

@@ -151,8 +151,8 @@ export default function ActivityChart() {
         >
           <defs>
             <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+              <stop offset="5%" stopColor={isLiveMode ? "#f43f5e" : "#3b82f6"} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={isLiveMode ? "#f43f5e" : "#3b82f6"} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -174,9 +174,10 @@ export default function ActivityChart() {
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} animationDuration={100} />
           <Area
+            key={isLiveMode ? "live" : "history"}
             type="monotone"
             dataKey="activity"
-            stroke="#3b82f6"
+            stroke={isLiveMode ? "#f43f5e" : "#3b82f6"}
             strokeWidth={3}
             fillOpacity={1}
             fill="url(#colorActivity)"

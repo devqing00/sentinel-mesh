@@ -194,7 +194,7 @@ export default function AlertsPage() {
                 <p className="text-sm text-gray-400 mt-1">All monitored users are within normal parameters.</p>
               </div>
             ) : (
-              <RankedUserTable data={attentionData} limit={5} hideControls={true} />
+              <RankedUserTable data={attentionData as any} limit={5} hideControls={true} />
             )}
           </div>
         </div>

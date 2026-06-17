@@ -55,6 +55,16 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
         await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/devices/simulation/${endpoint}`, {
           method: "POST"
         });
+
+        // Clean UI state if we are turning off live mode
+        if (!isLiveMode) {
+          setLiveAlerts([]);
+          setLatestActivity(0);
+          setRankedTable([]);
+          localStorage.removeItem("sentinel-ws-cache");
+          // Optionally trigger a reload or refetch event for other components here if needed
+          window.dispatchEvent(new Event("simulation-stopped"));
+        }
       } catch (err) {
         console.error("Failed to toggle backend simulation", err);
       }

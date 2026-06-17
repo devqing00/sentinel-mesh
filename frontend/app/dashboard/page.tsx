@@ -382,7 +382,7 @@ export default function Dashboard() {
               </div>
 
               <div className="flex-1 h-full w-full relative z-10">
-                <RiskHeatmap data={displayData} />
+                <RiskHeatmap data={displayData as any} />
               </div>
 
               {/* Dark Gradient Overlay */}

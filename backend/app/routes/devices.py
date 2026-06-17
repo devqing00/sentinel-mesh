@@ -13,9 +13,15 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 async def api_start_simulation():
     return await start_simulation()
 
+from app.routes.ingest import clear_all_collections, ingest_all
+
 @router.post("/simulation/stop")
 async def api_stop_simulation():
-    return await stop_simulation()
+    res = await stop_simulation()
+    # Reset DB to clean slate
+    await clear_all_collections()
+    await ingest_all()
+    return res
 
 class PingData(BaseModel):
     user_id: str

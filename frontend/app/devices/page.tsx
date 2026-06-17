@@ -44,6 +44,15 @@ export default function DevicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 24;
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -95,6 +104,9 @@ export default function DevicesPage() {
     const matchesStatus = statusFilter === "all" || d.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const totalPages = Math.ceil(filteredDevices.length / pageSize);
+  const paginatedDevices = filteredDevices.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Summary Metrics
   const totalDevices = devices.length;
@@ -214,7 +226,7 @@ export default function DevicesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-            {filteredDevices.map((device) => (
+            {paginatedDevices.map((device) => (
               <div 
                 key={device.device_id} 
                 className={`premium-card flex flex-col justify-between group overflow-hidden cursor-pointer transition-all ${
@@ -336,6 +348,29 @@ export default function DevicesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {!loading && totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-8 pb-4">
+            <button 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              Previous
+            </button>
+            <span className="text-sm font-medium text-gray-500">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              Next
+            </button>
           </div>
         )}
       </div>
